@@ -1,92 +1,139 @@
-# Smartcontract
+# UWE Contract
+
+## Config file .env
+
+**MIN_COLLATERAL_RATIO = 150 means 150%**
+
+**MAX_COLLATERAL_RATIO = 1000 means 1000%**
+
+**UPDATE_PRICE_CYCLE=86400 means 1 day**
+
+**LOCK_TIME=1209600 means 2 weeks**
+
+**ROYALTY_FEE_RATIO = 100 means 1%**
+
+**INITIAL_SUPPLY is in ether unit**
+
+**UASSET_PER_POOL is in ether unit**
+
+## Networks
+
+[Rinkeby]:
+
+Uniswap router: 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+
+Uniswap factory: 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
+
+Proxy Controller:
+0xD0e28a6F4c63D9C63A41b043a2d6317c1dE56781
+
+Proxy MintContract:
+0x4D41849156E15D6e948DEFe3B3B9F64F192b8731
+
+Proxy LockContract:
+0x9A9708D922E01081056F240047018E4E7129e6C4
+
+Proxy LimitOffer:
+0xF49AB7883b007BC141A65af116C32C9f30BD05b5
 
 
+EURB: 0xBee09d881765668BC192A7944b3E4FB91498Bd4e
 
-## Getting started
+uTSLA: 0x33E9cE246eB369e1ecC8bcf8aCd5E8223A22b8A4
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+uAAPL: 0x0559e84a82d5a9Ea0a37c1935f3Ce37A107562EF
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
 
-## Add your files
+[Ethereum_Mainnet]:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+Uniswap router: 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
 
-```
-cd existing_repo
-git remote add origin https://git.ekoios.vn/d2/koine-avalanche/smartcontract.git
-git branch -M main
-git push -uf origin main
-```
+Uniswap factory: 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
 
-## Integrate with your tools
 
-- [ ] [Set up project integrations](https://git.ekoios.vn/d2/koine-avalanche/smartcontract/-/settings/integrations)
+## Deploy contracts
 
-## Collaborate with your team
+> npm run deploy:*network name*:controller
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+> npm run deploy:*network name*:minter
 
-## Test and Deploy
+> npm run deploy:*network name*:offer
 
-Use the built-in continuous integration in GitLab.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Deploy tokens
 
-***
+**To deploy specific tokens, input the name of the token in the variable array in the file deployTokens.js** 
 
-# Editing this README
+**If the array is empty, it will deploy all the tokens in the scripts/data/*network name*/deployedToken.json**
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+**Default discount rate for each token is 10%**
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+>   npm run deploy:*network name*:token
 
-## Name
-Choose a self-explaining name for your project.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## Deploy oracles
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+**To deploy specific oracles of tokens, input the name of the token in the variable array in the file deployOracles.js**
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+**If the array is empty, it will deploy all the oracles of each tokens in the scripts/data/*network name*/deployedToken.json**
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+>   npm run deploy:*network name*:oracle
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Update prices
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+>   npm run fetch_data
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+**To update prices of specific tokens, input the name of the token in the variable array in the file updatePrices.js**
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+**If the array is empty, it will update prices of all tokens in the scripts/data/*network name*/deployedToken.json**
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+>   npm run update_prices:*network name*
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
 
-## License
-For open source projects, say how it is licensed.
+## Deploy pools
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+**To deploy specific pools of tokens, input the name of the token in the variable array in the file deployPools.js**
+
+**If the array is empty, it will deploy all the pools of each tokens in the scripts/data/*network name*/deployedToken.json**
+
+>   npm run deploy:*network name*:pool
+
+
+## Register Tokens
+
+**To register specific tokens, input the name of the token in the variable array in the file registerTokens.js**
+
+**If the array is empty, it will register all tokens in the scripts/data/*network name*/deployedToken.json**
+
+>   npm run register_tokens:*network name*
+
+
+## Upgrade contracts
+
+> npm run upgrade:*network name*:controller
+
+> npm run upgrade:*network name*:minter
+
+> npm run upgrade:*network name*:offer
+
+
+## Verify contracts
+
+### Verify Controller
+
+> npx hardhat verify --network *network name* *address of the deployed proxy* *address of the deployed controller*
+
+> npx hardhat verify --network *network name* *address of the deployed controller*
+
+### Verify Minter
+
+> npx hardhat verify --network *network name* *address of the deployed proxy* *address of the deployed minter*
+
+> npx hardhat verify --network *network name* *address of the deployed minter*
+
+### Verify Offer
+
+> npx hardhat verify --network *network name* *address of the deployed proxy* *address of the deployed offer*
+
+> npx hardhat verify --network *network name* *address of the deployed offer*
