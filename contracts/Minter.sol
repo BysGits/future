@@ -7,7 +7,6 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import {IController} from "./interfaces/IController.sol";
-import {IOracle} from "./interfaces/IOracle.sol";
 import {Ownable} from "./Ownable.sol";
 import {IEURB} from "./interfaces/IEURB.sol";
 
@@ -141,7 +140,14 @@ contract Minter is Ownable, ReentrancyGuard {
         emit ClaimAll(msg.sender, ids);
     }
 
-    function borrow(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
+    function borrow(
+        address uAssetAddress, 
+        uint256 uAssetAmount, 
+        uint256 collateralAmount, 
+        uint256 targetPrice, 
+        bytes memory id, 
+        bytes memory signature
+    ) external nonReentrant {
         if(accounts[id] == address(0)) accounts[id] = msg.sender;
         if(typeBorrow[id] == 0) typeBorrow[id] = 1;
         {
@@ -152,15 +158,10 @@ contract Minter is Ownable, ReentrancyGuard {
         {
             uAssetAddressById[id] = uAssetAddress;
         }
-        uint256 ttl = IController(controllerAddress).ttl();
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
         uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
-
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
+        
         address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-        require(block.timestamp - updatedTime <= ttl, "Target price is not updated");
         
         uint256 realCollateralAmount = (targetPrice * uAssetAmount) / (10 ** IEURB(uAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
@@ -171,29 +172,27 @@ contract Minter is Ownable, ReentrancyGuard {
         emit BorrowAsset(msg.sender, id, uAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function editBorrow(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, bytes memory id) public nonReentrant {
+    function editBorrow(
+        address uAssetAddress, 
+        uint256 uAssetAmount, 
+        uint256 collateralAmount, 
+        uint256 targetPrice, 
+        bytes memory id, 
+        bytes memory signature
+    ) public nonReentrant {
         require(msg.sender == accounts[id]);
         require(collateralBalances[id] > 0);
         require(typeBorrow[id] == 1);
         address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
         
         {
-            uint256 ttl = IController(controllerAddress).ttl();
-            
-            
-            if(block.timestamp - updatedTime > ttl) {
-                require(uAssetAmount == borrowBalances[id], "Outside of market hour");
-            } else {
-                if(uAssetAmount < borrowBalances[id]) {
-                    uint256 diff = borrowBalances[id] - uAssetAmount;
-                    IEURB(uAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
-                    IEURB(uAssetAddress).burn(diff);
-                } else if (uAssetAmount > borrowBalances[id]) {
-                    uint256 diff = uAssetAmount - borrowBalances[id];
-                    IEURB(uAssetAddress).mint(msg.sender, diff);
-                }
+            if(uAssetAmount < borrowBalances[id]) {
+                uint256 diff = borrowBalances[id] - uAssetAmount;
+                IEURB(uAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
+                IEURB(uAssetAddress).burn(diff);
+            } else if (uAssetAmount > borrowBalances[id]) {
+                uint256 diff = uAssetAmount - borrowBalances[id];
+                IEURB(uAssetAddress).mint(msg.sender, diff);
             }
         }
         {
@@ -219,7 +218,12 @@ contract Minter is Ownable, ReentrancyGuard {
         emit BorrowAsset(msg.sender, id, uAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function close(address uAssetAddress, bytes memory id) external nonReentrant {
+    function close(
+        address uAssetAddress, 
+        uint256 targetPrice, 
+        bytes memory id, 
+        bytes memory signature
+    ) external nonReentrant {
         require(msg.sender == accounts[id]);
         require(collateralBalances[id] > 0);
         uint256 uAssetAmount = borrowBalances[id];
@@ -231,8 +235,6 @@ contract Minter is Ownable, ReentrancyGuard {
         
         address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
         require(collateralAddress != address(0));
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        (uint256 targetPrice, ) = IOracle(oracleAddress).getTargetValue();
         uint256 fee = targetPrice * uAssetAmount * 15 / (10 ** IEURB(uAssetAddress).decimals() * 1000);
         if(fee < collateralBalances[id]) {
             collateralAmount -= fee;
@@ -246,7 +248,16 @@ contract Minter is Ownable, ReentrancyGuard {
         emit Close(msg.sender, id, typeBorrow[id], uAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function short(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount,uint256 deadline, uint16 slippage, bytes memory id) external nonReentrant {
+    function short(
+        address uAssetAddress, 
+        uint256 uAssetAmount, 
+        uint256 collateralAmount,
+        uint256 targetPrice,
+        uint256 deadline,
+        uint16 slippage, 
+        bytes memory id,
+        bytes memory signature
+    ) external nonReentrant {
         if(accounts[id] == address(0)) accounts[id] = msg.sender;
         if(typeBorrow[id] == 0) typeBorrow[id] = 2;
         {
@@ -258,12 +269,9 @@ contract Minter is Ownable, ReentrancyGuard {
         {
             uAssetAddressById[id] = uAssetAddress;
         }
-        {
-            uint256 ttl = IController(controllerAddress).ttl();
-            address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-            (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-            _checkShort(uAssetAddress, updatedTime, ttl, targetPrice, uAssetAmount, collateralAmount);
-        }
+
+        _checkShort(uAssetAddress, targetPrice, uAssetAmount, collateralAmount);
+        
         {
             IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
             IEURB(uAssetAddress).mint(address(this), uAssetAmount);
@@ -302,7 +310,16 @@ contract Minter is Ownable, ReentrancyGuard {
         }
     }
     
-    function editShort(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, uint256 deadline, uint16 slippage, bytes memory id) external nonReentrant {
+    function editShort(
+        address uAssetAddress, 
+        uint256 uAssetAmount, 
+        uint256 collateralAmount, 
+        uint256 targetPrice,
+        uint256 deadline, 
+        uint16 slippage, 
+        bytes memory id,
+        bytes memory signature
+    ) external nonReentrant {
         {
             require(msg.sender == accounts[id]); 
             require(collateralBalances[id] > 0);
@@ -310,12 +327,8 @@ contract Minter is Ownable, ReentrancyGuard {
         }
         uint8 isLocked = 0;
         address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        uint256 ttl = IController(controllerAddress).ttl();
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-        {
-            _checkShort(uAssetAddress, updatedTime, ttl, targetPrice, uAssetAmount, collateralAmount);
-        }
+
+        _checkShort(uAssetAddress, targetPrice, uAssetAmount, collateralAmount);
 
         if(collateralAmount < collateralBalances[id]) {
             uint256 diff = collateralBalances[id] - collateralAmount;
@@ -326,48 +339,44 @@ contract Minter is Ownable, ReentrancyGuard {
             IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
             collateralBalances[id] += (diff - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), diff));
         }
-        
-        if(block.timestamp - updatedTime > ttl) {
-            require(uAssetAmount == borrowBalances[id], "Outside of market hour");
-        } else {
-            if(uAssetAmount < borrowBalances[id]) {
-                uint256 diff = borrowBalances[id] - uAssetAmount;
-                address addr = uAssetAddress;
-                IEURB(addr).safeTransferFrom(msg.sender, address(this), diff);
-                IEURB(addr).burn(diff);
-            } else if (uAssetAmount > borrowBalances[id]) {
-                uint256 diff = uAssetAmount - borrowBalances[id];
-                address addr = uAssetAddress;
-                uint256 deadline_ = deadline;
-                {
-                    IEURB(addr).mint(address(this), diff);
-                }
-                address[] memory path = new address[](2);
-                uint[] memory reserve = new uint[](2);
-                {
-                    (uint reserve0, uint reserve1,) = IUniswapV2Pair(IController(controllerAddress).pools(addr)).getReserves();
-                    path[0] = addr;
-                    path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1();
-                    reserve[0] = reserve0;
-                    reserve[1] = reserve1;
-                    if (IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1() == addr) {
-                        path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token0();
-                        reserve[0] = reserve1;
-                        reserve[1] = reserve0;
-                    }
-                }
-                {
-                    IEURB(addr).safeApprove(IController(controllerAddress).router(), diff);
-                }
-                {
-                    uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
-                    uint256 balanceBefore = IEURB(path[1]).balanceOf(address(this));
-                    IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
-                    uint256 amountOut = IEURB(path[1]).balanceOf(address(this)) - balanceBefore;
-                    lock(id, amountOut);
-                }
-                isLocked = 1;
+
+        if(uAssetAmount < borrowBalances[id]) {
+            uint256 diff = borrowBalances[id] - uAssetAmount;
+            address addr = uAssetAddress;
+            IEURB(addr).safeTransferFrom(msg.sender, address(this), diff);
+            IEURB(addr).burn(diff);
+        } else if (uAssetAmount > borrowBalances[id]) {
+            uint256 diff = uAssetAmount - borrowBalances[id];
+            address addr = uAssetAddress;
+            uint256 deadline_ = deadline;
+            {
+                IEURB(addr).mint(address(this), diff);
             }
+            address[] memory path = new address[](2);
+            uint[] memory reserve = new uint[](2);
+            {
+                (uint reserve0, uint reserve1,) = IUniswapV2Pair(IController(controllerAddress).pools(addr)).getReserves();
+                path[0] = addr;
+                path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1();
+                reserve[0] = reserve0;
+                reserve[1] = reserve1;
+                if (IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1() == addr) {
+                    path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token0();
+                    reserve[0] = reserve1;
+                    reserve[1] = reserve0;
+                }
+            }
+            {
+                IEURB(addr).safeApprove(IController(controllerAddress).router(), diff);
+            }
+            {
+                uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
+                uint256 balanceBefore = IEURB(path[1]).balanceOf(address(this));
+                IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
+                uint256 amountOut = IEURB(path[1]).balanceOf(address(this)) - balanceBefore;
+                lock(id, amountOut);
+            }
+            isLocked = 1;
         }
         
         borrowBalances[id] = uAssetAmount;
@@ -375,17 +384,21 @@ contract Minter is Ownable, ReentrancyGuard {
         emit EditShort(msg.sender, id, isLocked, uAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function liquidation(address userAddress, address uAssetAddress, uint256 uAssetAmount, bytes memory id) external nonReentrant {
+    function liquidation(
+        address userAddress, 
+        address uAssetAddress, 
+        uint256 uAssetAmount, 
+        uint256 targetPrice,
+        bytes memory id,
+        bytes memory signature
+    ) external nonReentrant {
         require(userAddress == accounts[id], "Wrong account");
         require(borrowBalances[id] >= uAssetAmount, "Over liquidation");
         
         uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
         uint16 discountRate = IController(controllerAddress).discountRates(uAssetAddress);
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(IController(controllerAddress).oracles(uAssetAddress)).getTargetValue();
         
-        {
-            _checkLiquidation(uAssetAddress, targetPrice, updatedTime, borrowBalances[id], collateralBalances[id], calculationDecimal, discountRate);
-        }
+        _checkLiquidation(uAssetAddress, borrowBalances[id], collateralBalances[id], targetPrice, calculationDecimal, discountRate);
         
         uint256 discountedCollateralValue = 
             (uAssetAmount * targetPrice * 985 / 1000) / (10 ** IEURB(uAssetAddress).decimals())
@@ -420,18 +433,28 @@ contract Minter is Ownable, ReentrancyGuard {
         }
     }
     
-    function _checkShort(address uAssetAddress, uint256 updatedTime, uint256 ttl, uint256 targetPrice, uint256 uAssetAmount, uint256 collateralAmount) internal view {
+    function _checkShort(
+        address uAssetAddress, 
+        uint256 targetPrice, 
+        uint256 uAssetAmount, 
+        uint256 collateralAmount
+    ) internal view {
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
         uint16 maxCollateralRatio = IController(controllerAddress).maxCollateralRatio();
         uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
-        
-        require(block.timestamp - updatedTime <= ttl, "Target price is not updated");
         uint256 realCollateralAmount = targetPrice * uAssetAmount / (10 ** IEURB(uAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
         require(realCollateralAmount * maxCollateralRatio >= collateralAmount * (10**calculationDecimal), "greater than max");
     }
     
-    function _checkLiquidation(address uAssetAddress, uint256 targetPrice, uint256 updatedTime, uint256 borrowBalance, uint256 collateralBalance, uint16 calculationDecimal, uint16 discountRate) internal view {
+    function _checkLiquidation(
+        address uAssetAddress, 
+        uint256 borrowBalance, 
+        uint256 collateralBalance,
+        uint256 targetPrice,
+        uint16 calculationDecimal, 
+        uint16 discountRate
+    ) internal view {
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
         uint256 realCollateralAmount = targetPrice * borrowBalance / (10 ** IEURB(uAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio > collateralBalance * (10**calculationDecimal), "More than min");
@@ -439,8 +462,6 @@ contract Minter is Ownable, ReentrancyGuard {
         if (configDiscountRate < discountRate) {
             discountRate = configDiscountRate;
         }
-        uint256 ttl = IController(controllerAddress).ttl();
-        require(block.timestamp - updatedTime <= ttl, "Not updated");
     }
 
 }
