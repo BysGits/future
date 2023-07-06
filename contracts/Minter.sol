@@ -2,18 +2,18 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import {IController} from "./interfaces/IController.sol";
 import {Ownable} from "./Ownable.sol";
 import {SignatureUtils} from "./utils/SignatureUtils.sol";
-import {IEURB} from "./interfaces/IEURB.sol";
-
+import {ITokenERC20} from "./interfaces/ITokenERC20.sol";
 
 contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
-    using SafeERC20 for IEURB;
+    using SafeERC20 for ITokenERC20;
     
     address public controllerAddress;
 
@@ -129,8 +129,8 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
 
     function addMoreCollateralAmount(address kAssetAddress, uint256 collateralAmount, bytes memory id) external onlyAdmin {
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
-        IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
-        data[id].collateralBalance += (collateralAmount - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), collateralAmount));
+        ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
+        data[id].collateralBalance += collateralAmount;
     }
     
     function lock(bytes memory id, uint256 tokenAmount) internal {
@@ -152,7 +152,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         uint256 tokenAmount = data[id].userBalance;
         address kAssetAddress = data[id].kAssetAddress;
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
-        IEURB(collateralAddress).safeTransfer(msg.sender, tokenAmount);
+        ITokenERC20(collateralAddress).safeTransfer(msg.sender, tokenAmount);
         data[id].totalClaimed += tokenAmount;
         delete data[id].userBalance;
         delete data[id].updatedLockTime;
@@ -206,12 +206,12 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
         
-        uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** IEURB(kAssetAddress).decimals());
+        uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** ITokenERC20(kAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
-        IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
-        IEURB(kAssetAddress).mint(msg.sender, kAssetAmount);
+        ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
+        ITokenERC20(kAssetAddress).mint(msg.sender, kAssetAmount);
         data[id].borrowBalance = kAssetAmount;
-        data[id].collateralBalance = collateralAmount - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), collateralAmount);
+        data[id].collateralBalance = collateralAmount;
         emit BorrowAsset(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
@@ -244,29 +244,29 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         {
             if(kAssetAmount < data[id].borrowBalance) {
                 uint256 diff = data[id].borrowBalance - kAssetAmount;
-                IEURB(kAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
-                IEURB(kAssetAddress).burn(diff);
+                ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
+                ITokenERC20(kAssetAddress).burn(diff);
             } else if (kAssetAmount > data[id].borrowBalance) {
                 uint256 diff = kAssetAmount - data[id].borrowBalance;
-                IEURB(kAssetAddress).mint(msg.sender, diff);
+                ITokenERC20(kAssetAddress).mint(msg.sender, diff);
             }
         }
         {
             uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
             uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
             
-            uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** IEURB(kAssetAddress).decimals());
+            uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** ITokenERC20(kAssetAddress).decimals());
             require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
         }
         
         if(collateralAmount < data[id].collateralBalance) {
             uint256 diff = data[id].collateralBalance - collateralAmount;
-            IEURB(collateralAddress).safeTransfer(msg.sender, diff);
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, diff);
             data[id].collateralBalance = collateralAmount;
         } else if(collateralAmount > data[id].collateralBalance){
             uint256 diff = collateralAmount - data[id].collateralBalance;
-            IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
-            data[id].collateralBalance += (diff - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), diff));
+            ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
+            data[id].collateralBalance += diff;
         }
         
         data[id].borrowBalance = kAssetAmount;
@@ -299,17 +299,17 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             );
         }
         if (kAssetAmount > 0) {
-            IEURB(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
-            IEURB(kAssetAddress).burn(kAssetAmount);
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
+            ITokenERC20(kAssetAddress).burn(kAssetAmount);
         }
         
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
         require(collateralAddress != address(0));
-        uint256 fee = targetPrice * kAssetAmount * 15 / (10 ** IEURB(kAssetAddress).decimals() * 1000);
+        uint256 fee = targetPrice * kAssetAmount * 15 / (10 ** ITokenERC20(kAssetAddress).decimals() * 1000);
         if(fee < data[id].collateralBalance) {
             collateralAmount -= fee;
-            IEURB(collateralAddress).safeTransfer(msg.sender, collateralAmount);
-            IEURB(collateralAddress).safeTransfer(owner(), fee);
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, collateralAmount);
+            ITokenERC20(collateralAddress).safeTransfer(owner(), fee);
         }
         
         data[id].borrowBalance = 0;
@@ -357,13 +357,13 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         _checkShort(kAssetAddress, targetPrice, kAssetAmount, collateralAmount);
         
         {
-            IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
-            IEURB(kAssetAddress).mint(address(this), kAssetAmount);
+            ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
+            ITokenERC20(kAssetAddress).mint(address(this), kAssetAmount);
             data[id].borrowBalance = kAssetAmount;
-            data[id].collateralBalance = collateralAmount - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), collateralAmount);
+            data[id].collateralBalance = collateralAmount;
         }
         {
-            IEURB(kAssetAddress).safeApprove(IController(controllerAddress).router(), kAssetAmount);
+            ITokenERC20(kAssetAddress).safeApprove(IController(controllerAddress).router(), kAssetAmount);
         }
         {
             address[] memory path = new address[](2);
@@ -385,9 +385,9 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 }
             }
             uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(kAssetAmount, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
-            uint256 balanceBefore = IEURB(path[1]).balanceOf(address(this));
+            uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
             IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(kAssetAmount, amountOutMin, path, address(this), deadline);
-            uint256 amountOut = IEURB(path[1]).balanceOf(address(this)) - balanceBefore;
+            uint256 amountOut = ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore;
             lock(id, amountOut);
             emit Short(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
         }
@@ -429,25 +429,25 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
 
         if(collateralAmount < data[id].collateralBalance) {
             uint256 diff = data[id].collateralBalance - collateralAmount;
-            IEURB(collateralAddress).safeTransfer(msg.sender, diff);
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, diff);
             data[id].collateralBalance = collateralAmount;
         } else if(collateralAmount > data[id].collateralBalance){
             uint256 diff = collateralAmount - data[id].collateralBalance;
-            IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
-            data[id].collateralBalance += (diff - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), diff));
+            ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
+            data[id].collateralBalance += diff;
         }
 
         if(kAssetAmount < data[id].borrowBalance) {
             uint256 diff = data[id].borrowBalance - kAssetAmount;
             address addr = kAssetAddress;
-            IEURB(addr).safeTransferFrom(msg.sender, address(this), diff);
-            IEURB(addr).burn(diff);
+            ITokenERC20(addr).safeTransferFrom(msg.sender, address(this), diff);
+            ITokenERC20(addr).burn(diff);
         } else if (kAssetAmount > data[id].borrowBalance) {
             uint256 diff = kAssetAmount - data[id].borrowBalance;
             address addr = kAssetAddress;
             uint256 deadline_ = deadline;
             {
-                IEURB(addr).mint(address(this), diff);
+                ITokenERC20(addr).mint(address(this), diff);
             }
             address[] memory path = new address[](2);
             uint[] memory reserve = new uint[](2);
@@ -464,13 +464,13 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 }
             }
             {
-                IEURB(addr).safeApprove(IController(controllerAddress).router(), diff);
+                ITokenERC20(addr).safeApprove(IController(controllerAddress).router(), diff);
             }
             {
                 uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
-                uint256 balanceBefore = IEURB(path[1]).balanceOf(address(this));
+                uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
                 IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
-                uint256 amountOut = IEURB(path[1]).balanceOf(address(this)) - balanceBefore;
+                uint256 amountOut = ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore;
                 lock(id, amountOut);
             }
             isLocked = 1;
@@ -510,29 +510,29 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         _checkLiquidation(kAssetAddress, data[id].borrowBalance, data[id].collateralBalance, targetPrice, calculationDecimal, discountRate);
         
         uint256 discountedCollateralValue = 
-            (kAssetAmount * targetPrice * 985 / 1000) / (10 ** IEURB(kAssetAddress).decimals())
+            (kAssetAmount * targetPrice * 985 / 1000) / (10 ** ITokenERC20(kAssetAddress).decimals())
             * (10**calculationDecimal)
             / (10**calculationDecimal - discountRate);
             
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
         if (discountedCollateralValue <= data[id].collateralBalance) {
-            IEURB(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
-            IEURB(kAssetAddress).burn(kAssetAmount);
-            IEURB(collateralAddress).safeTransfer(msg.sender, discountedCollateralValue);
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
+            ITokenERC20(kAssetAddress).burn(kAssetAmount);
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, discountedCollateralValue);
             data[id].borrowBalance -= kAssetAmount;
             data[id].collateralBalance -= discountedCollateralValue;
             if(data[id].borrowBalance == 0) {
-                IEURB(collateralAddress).safeTransfer(data[id].account, data[id].collateralBalance);
+                ITokenERC20(collateralAddress).safeTransfer(data[id].account, data[id].collateralBalance);
                 data[id].collateralBalance = 0;
             }
             emit Liquidation(msg.sender, data[id].account, id, kAssetAmount, discountedCollateralValue, block.timestamp, discountRate);
         } else {
             uint256 collateralBalance = data[id].collateralBalance;
-            uint256 kAssetNeeded =  collateralBalance * ((10**calculationDecimal) - discountRate) * (10 ** IEURB(kAssetAddress).decimals()) / ((10**calculationDecimal) * targetPrice * 985 / 1000);
+            uint256 kAssetNeeded =  collateralBalance * ((10**calculationDecimal) - discountRate) * (10 ** ITokenERC20(kAssetAddress).decimals()) / ((10**calculationDecimal) * targetPrice * 985 / 1000);
             {
-                IEURB(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetNeeded);
-                IEURB(kAssetAddress).burn(kAssetNeeded);
-                IEURB(collateralAddress).safeTransfer(msg.sender, collateralBalance);
+                ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetNeeded);
+                ITokenERC20(kAssetAddress).burn(kAssetNeeded);
+                ITokenERC20(collateralAddress).safeTransfer(msg.sender, collateralBalance);
             }
             {
                 data[id].borrowBalance -= kAssetNeeded;
@@ -551,7 +551,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
         uint16 maxCollateralRatio = IController(controllerAddress).maxCollateralRatio();
         uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
-        uint256 realCollateralAmount = targetPrice * kAssetAmount / (10 ** IEURB(kAssetAddress).decimals());
+        uint256 realCollateralAmount = targetPrice * kAssetAmount / (10 ** ITokenERC20(kAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
         require(realCollateralAmount * maxCollateralRatio >= collateralAmount * (10**calculationDecimal), "greater than max");
     }
@@ -565,7 +565,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         uint16 discountRate
     ) internal view {
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
-        uint256 realCollateralAmount = targetPrice * borrowBalance / (10 ** IEURB(kAssetAddress).decimals());
+        uint256 realCollateralAmount = targetPrice * borrowBalance / (10 ** ITokenERC20(kAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio > collateralBalance * (10**calculationDecimal), "More than min");
         uint16 configDiscountRate = IController(controllerAddress).discountRates(kAssetAddress);
         if (configDiscountRate < discountRate) {
