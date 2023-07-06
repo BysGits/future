@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -15,7 +15,10 @@ contract LimitOffer is Ownable, ReentrancyGuard {
 
     uint16 public constant royaltyDecimal = 4;
 
+    uint256 public amountToClaim;
+
     address public controllerAddress;
+    
 
     struct Order {
         uint256 offerCollateralAmount;
@@ -26,7 +29,6 @@ contract LimitOffer is Ownable, ReentrancyGuard {
     mapping(bytes => Order) public orders;     // id -> order
     mapping(bytes => uint256) public offerFee;
 
-    uint256 public amountToClaim;
 
     event Offer(
         address indexed userAddress,

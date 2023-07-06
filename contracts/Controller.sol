@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -11,12 +11,14 @@ contract Controller is Ownable, IController, Initializable {
     uint16 public override maxCollateralRatio;
     uint16 public constant override calculationDecimal = 2;
 
-    uint256 public override ttl;
     uint256 public override lockTime;
+    uint256 public override royaltyFeeRatio;
 
     address public override mintContract;
-
     address public override router;
+    address public override recieverAddress;
+    address public override limitOfferContract;
+    address public override signer;
 
     // mapping token address to AMM pool address
     mapping(address => address) public override pools;
@@ -32,10 +34,6 @@ contract Controller is Ownable, IController, Initializable {
 
     mapping(address => bool) public override admins;
 
-    uint256 public override royaltyFeeRatio;
-    address public override recieverAddress;
-    address public override limitOfferContract;
-
     event ListingToken(address indexed tokenAddress, uint256 timestamp);
     event DelistingToken(address indexed tokenAddress, uint256 timestamp);
 
@@ -46,23 +44,30 @@ contract Controller is Ownable, IController, Initializable {
         _;
     }
 
+    modifier notZeroAddress(address _addr) {
+        require(_addr != address(0), "Not zero address");
+        _;
+    }
+
     function initialize(
         uint16 _minCollateralRatio,
         uint16 _maxCollateralRatio,
-        uint256 _ttl,
         address _router
     ) external onlyOwner initializer {
         minCollateralRatio = _minCollateralRatio;
         maxCollateralRatio = _maxCollateralRatio;
-        ttl = _ttl;
         router = _router;
     }
 
-    function setAdmin(address _addr) public onlyOwner {
+    function setSigner(address _addr) public onlyOwner notZeroAddress(_addr) {
+        signer = _addr;
+    }
+
+    function setAdmin(address _addr) public onlyOwner notZeroAddress(_addr) {
         admins[_addr] = true;
     }
 
-    function revokeAdmin(address _addr) public onlyOwner {
+    function revokeAdmin(address _addr) public onlyOwner notZeroAddress(_addr) {
         admins[_addr] = false;
     }
 
@@ -70,7 +75,7 @@ contract Controller is Ownable, IController, Initializable {
         royaltyFeeRatio = _fee;
     }
 
-    function setRecieverAddress(address _addr) public onlyOwner {
+    function setRecieverAddress(address _addr) public onlyOwner notZeroAddress(_addr) {
         recieverAddress = _addr;
     }
 
@@ -86,12 +91,8 @@ contract Controller is Ownable, IController, Initializable {
         maxCollateralRatio = _maxCollateralRatio;
     }
 
-    function setRouter(address _router) external onlyOwner {
+    function setRouter(address _router) external onlyOwner notZeroAddress(_router) {
         router = _router;
-    }
-
-    function setTTL(uint256 _ttl) external onlyOwner {
-        ttl = _ttl;
     }
 
     function setLockTime(uint256 _lockTime) external onlyOwner {
@@ -99,20 +100,20 @@ contract Controller is Ownable, IController, Initializable {
         lockTime = _lockTime;
     }
 
-    function setMintContract(address _mintAddress) external onlyOwner {
+    function setMintContract(address _mintAddress) external onlyOwner notZeroAddress(_mintAddress) {
         mintContract = _mintAddress;
     }
 
     function setLimitOfferContract(
         address _limitOfferContract
-    ) external onlyOwner {
+    ) external onlyOwner notZeroAddress(_limitOfferContract) {
         limitOfferContract = _limitOfferContract;
     }
 
     function setDiscountRate(
         address _tokenAddress,
         uint16 _rate
-    ) external onlyOwner {
+    ) external onlyOwner notZeroAddress(_tokenAddress) {
         discountRates[_tokenAddress] = _rate;
     }
 
