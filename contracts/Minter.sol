@@ -370,16 +370,14 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             uint[] memory reserve = new uint[](2);
             {
                 address poolAddress = IController(controllerAddress).pools(kAssetAddress);
-                address token0 = IUniswapV2Pair(poolAddress).token0();
-                address token1 = IUniswapV2Pair(poolAddress).token1();
                 (uint reserve0, uint reserve1,) = IUniswapV2Pair(poolAddress).getReserves();
                 
                 path[0] = kAssetAddress;
-                path[1] = token1;
+                path[1] = IUniswapV2Pair(poolAddress).token1();
                 reserve[0] = reserve0;
                 reserve[1] = reserve1;
-                if (token1 == kAssetAddress) {
-                    path[1] = token0;
+                if (path[1] == kAssetAddress) {
+                    path[1] = IUniswapV2Pair(poolAddress).token0();
                     reserve[0] = reserve1;
                     reserve[1] = reserve0;
                 }
@@ -387,8 +385,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(kAssetAmount, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
             uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
             IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(kAssetAmount, amountOutMin, path, address(this), deadline);
-            uint256 amountOut = ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore;
-            lock(id, amountOut);
+            lock(id, ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore);
             emit Short(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
         }
     }
@@ -439,39 +436,37 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
 
         if(kAssetAmount < data[id].borrowBalance) {
             uint256 diff = data[id].borrowBalance - kAssetAmount;
-            address addr = kAssetAddress;
-            ITokenERC20(addr).safeTransferFrom(msg.sender, address(this), diff);
-            ITokenERC20(addr).burn(diff);
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
+            ITokenERC20(kAssetAddress).burn(diff);
         } else if (kAssetAmount > data[id].borrowBalance) {
             uint256 diff = kAssetAmount - data[id].borrowBalance;
-            address addr = kAssetAddress;
-            uint256 deadline_ = deadline;
             {
-                ITokenERC20(addr).mint(address(this), diff);
+                ITokenERC20(kAssetAddress).mint(address(this), diff);
             }
             address[] memory path = new address[](2);
             uint[] memory reserve = new uint[](2);
             {
-                (uint reserve0, uint reserve1,) = IUniswapV2Pair(IController(controllerAddress).pools(addr)).getReserves();
-                path[0] = addr;
-                path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1();
+                address poolAddress = IController(controllerAddress).pools(kAssetAddress);
+                (uint reserve0, uint reserve1,) = IUniswapV2Pair(poolAddress).getReserves();
+                path[0] = kAssetAddress;
+                path[1] = IUniswapV2Pair(poolAddress).token1();
                 reserve[0] = reserve0;
                 reserve[1] = reserve1;
-                if (IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1() == addr) {
-                    path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token0();
+                if (path[1] == kAssetAddress) {
+                    path[1] = IUniswapV2Pair(poolAddress).token0();
                     reserve[0] = reserve1;
                     reserve[1] = reserve0;
                 }
             }
             {
-                ITokenERC20(addr).safeApprove(IController(controllerAddress).router(), diff);
+                ITokenERC20(kAssetAddress).safeApprove(IController(controllerAddress).router(), diff);
             }
             {
+                uint256 deadline_ = deadline;
                 uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
                 uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
                 IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
-                uint256 amountOut = ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore;
-                lock(id, amountOut);
+                lock(id, ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore);
             }
             isLocked = 1;
         }
