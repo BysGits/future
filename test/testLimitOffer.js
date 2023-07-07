@@ -24,17 +24,16 @@ describe("Test Limit Offer", async () => {
     let Pool, pool
     let Router, router
     let Offer, offer
-    let Oracle, oracle
 
-    let owner, addr1, addr2, addr3, addrs;
+    let owner, addr1, addr2, signerAddr, addrs;
 
     let minCollateralRatio = 150
     let maxCollateralRatio = 200
-    let ttl = 86400
+    let royaltyFeeRatio = 80
     let lockTime = 1.21e+6
 
     before(async () => {
-        [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
+        [owner, addr1, addr2, signerAddr, ...addrs] = await ethers.getSigners();
         console.log(`Owner: ${owner.address} \nAcc1: ${addr1.address} \nAcc2: ${addr2.address}`);
 
         Router = await ethers.getContractFactory("MockRouter1_5")
@@ -75,10 +74,6 @@ describe("Test Limit Offer", async () => {
         Offer = await ethers.getContractFactory("LimitOffer")
         offer = await Offer.deploy()
         await offer.deployed()
-
-        Oracle = await ethers.getContractFactory("Oracle")
-        oracle = await Oracle.deploy(controller.address)
-        await oracle.deployed()
 
         ProxyController = await ethers.getContractFactory("Proxy")
         proxyController = await ProxyController.deploy(controller.address)
@@ -153,7 +148,7 @@ describe("Test Limit Offer", async () => {
 
         console.log("Pool owner: " + await pool.owner());
 
-        let initializing = await controller.connect(owner).initialize(minCollateralRatio, maxCollateralRatio, ttl, router.address)
+        let initializing = await controller.connect(owner).initialize(minCollateralRatio, maxCollateralRatio, lockTime, royaltyFeeRatio, router.address, owner.address, signerAddr.address)
         await initializing.wait()
 
         let setLockTime = await controller.connect(owner).setLockTime(lockTime)
@@ -171,11 +166,16 @@ describe("Test Limit Offer", async () => {
         let register = await controller.connect(owner).registerCollateralAsset(eurb.address, true)
         await register.wait()
 
-        register = await controller.connect(owner).registerIDOToken(uToken.address, oracle.address, pool.address, eurb.address, 10)
+        register = await controller.connect(owner).registerIDOToken(uToken.address, pool.address, eurb.address, 10)
         await register.wait()
     })
 
     describe("setControllerAddress", async () => {
+        it("Only owner can get amount to claim", async () => {
+            expect(await offer.connect(owner).getAmountToClaim()).to.be.equal(0)
+            expect(await offer.connect(owner).getAmountToClaim()).to.be.ok
+            await expect(offer.connect(addr1).getAmountToClaim()).to.be.reverted
+        })
         it("Set successfully", async () => {
             expect(await offer.connect(owner).setControllerAddress(controller.address)).to.be.ok
             expect(await offer.controllerAddress()).to.be.equal(controller.address)

@@ -4,16 +4,16 @@ const { expect } = require("chai");
 describe("Test Controller", async () => {
     let Proxy, proxy
     let Controller, controller
-    let oracle
-    let owner, addr1, addr2, addr3, addrs;
+    let owner, addr1, addr2, signerAddr, addrs;
 
     let minCollateralRatio = 150
     let maxCollateralRatio = 200
+    let royaltyFeeRatio = 80
     let lockTime = 1.21e+6
     let routerAddress = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 
     before(async () => {
-        [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
+        [owner, addr1, addr2, signerAddr, ...addrs] = await ethers.getSigners();
         console.log(`Owner: ${owner.address} \nAcc1: ${addr1.address} \nAcc2: ${addr2.address}`);
 
         Controller = await ethers.getContractFactory("Controller")
@@ -29,13 +29,24 @@ describe("Test Controller", async () => {
 
     describe("initialize", async () => {
         it("Successfully initialize", async () => {
-            expect(await controller.connect(owner).initialize(minCollateralRatio, maxCollateralRatio, ttl, routerAddress)).to.be.ok
+            expect(await controller.connect(owner).initialize(minCollateralRatio, maxCollateralRatio, lockTime, royaltyFeeRatio, routerAddress, owner.address, signerAddr.address)).to.be.ok
         })
         it("Can only be called by owner", async () => {
-            await expect(controller.connect(addr1).initialize(minCollateralRatio, maxCollateralRatio, ttl, routerAddress)).to.be.reverted
+            await expect(controller.connect(addr1).initialize(minCollateralRatio, maxCollateralRatio, lockTime, royaltyFeeRatio, routerAddress, owner.address, signerAddr.address)).to.be.reverted
         })
         it("Can only run once", async () => {
-            await expect(controller.connect(owner).initialize(minCollateralRatio, maxCollateralRatio, ttl, routerAddress)).to.be.reverted
+            await expect(controller.connect(owner).initialize(minCollateralRatio, maxCollateralRatio, lockTime, royaltyFeeRatio, routerAddress, owner.address, signerAddr.address)).to.be.reverted
+        })
+    })
+
+    describe("setSigner", async () => {
+        it("Set successfully", async () => {
+            expect(await controller.connect(owner).setSigner(signerAddr.address)).to.be.ok
+            expect(await controller.getSigner()).to.be.equal(signerAddr.address)
+        })
+        it("Can only be called by owner", async () => {
+            await expect(controller.connect(addr1).setSigner(addr2.address)).to.be.reverted
+            expect(await controller.getSigner()).to.be.equal(signerAddr.address)
         })
     })
 
@@ -76,11 +87,11 @@ describe("Test Controller", async () => {
     describe("setRecieverAddress", async () => {
         it("Set successfully", async () => {
             expect(await controller.connect(owner).setRecieverAddress(owner.address)).to.be.ok
-            expect(await controller.recieverAddress()).to.be.equal(owner.address)
+            expect(await controller.receiverAddress()).to.be.equal(owner.address)
         })
         it("Can only be called by owner", async () => {
             await expect(controller.connect(addr1).setRecieverAddress(addr2.address)).to.be.reverted
-            expect(await controller.recieverAddress()).to.be.equal(owner.address)
+            expect(await controller.receiverAddress()).to.be.equal(owner.address)
         })
     })
 
@@ -126,21 +137,6 @@ describe("Test Controller", async () => {
         it("Only owner can set", async () => {
             await expect(controller.connect(addr1).setRouter("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")).to.be.reverted
             expect(await controller.router()).to.be.equal("0x6eF03abAeee4b3937cBc6459986a993a6ce4BFD2")
-        })
-    })
-
-    describe("setTTL", async () => {
-        it("Set successfully", async () => {
-            expect(await controller.connect(owner).setTTL(96400)).to.be.ok
-            expect(await controller.ttl()).to.be.equal(96400)
-
-            expect(await controller.connect(owner).setTTL(86400)).to.be.ok
-            expect(await controller.ttl()).to.be.equal(86400)
-        })
-
-        it("Only owner can set", async () => {
-            await expect(controller.connect(addr1).setTTL(12341324)).to.be.reverted
-            expect(await controller.ttl()).to.be.equal(86400)
         })
     })
 
@@ -208,56 +204,47 @@ describe("Test Controller", async () => {
 
     describe("registerIDOToken", async () => {
         let Pool, pool
-        let Oracle
 
         beforeEach(async () => {
             Pool = await ethers.getContractFactory("MockPair")
             pool = await Pool.deploy("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC", "0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6")
             await pool.deployed()
 
-            Oracle = await ethers.getContractFactory("Oracle")
-            oracle = await Oracle.deploy(controller.address)
-            await oracle.deployed()
-
             await controller.connect(owner).registerCollateralAsset("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",true)
         })
 
         it("Only admin can call", async () => {
-            await expect(controller.connect(addr2).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
+            await expect(controller.connect(addr2).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
         })
 
         it("Register successfully", async () => {
-            expect(await controller.connect(owner).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.ok
+            expect(await controller.connect(owner).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.ok
         })
 
         it("Duplicate Token address", async () => {
-            await expect(controller.connect(owner).registerIDOToken("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
+            await expect(controller.connect(owner).registerIDOToken("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC", pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
         })
 
         it("Token is already registered", async () => {
-            await expect(controller.connect(owner).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
+            await expect(controller.connect(owner).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6", pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
         })
 
         it("Invalid colateral token", async () => {
-            await expect(controller.connect(owner).registerIDOToken("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",oracle.address,pool.address,"0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",20)).to.be.reverted
+            await expect(controller.connect(owner).registerIDOToken("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC", pool.address,"0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",20)).to.be.reverted
         })
 
         it("Missing token address", async () => {
-            await expect(controller.connect(owner).registerIDOToken("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
+            await expect(controller.connect(owner).registerIDOToken("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
         })
 
         it("Missing collateral address", async () => {
             await pool.connect(owner).setToken0("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")
-            await expect(controller.connect(owner).registerIDOToken("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
+            await expect(controller.connect(owner).registerIDOToken("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC", pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)).to.be.reverted
         })
     })
 
     describe("unregisterToken", async () => {
         beforeEach(async () => {
-            Oracle = await ethers.getContractFactory("Oracle")
-            oracle = await Oracle.deploy(controller.address)
-            await oracle.deployed()
-
             let registering = await controller.connect(owner).registerCollateralAsset("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",true)
             await registering.wait()
 
@@ -283,39 +270,29 @@ describe("Test Controller", async () => {
             pool = await Pool.deploy("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC", "0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6")
             await pool.deployed()
 
-            Oracle = await ethers.getContractFactory("Oracle")
-            oracle = await Oracle.deploy(controller.address)
-            await oracle.deployed()
-
             await controller.connect(owner).registerCollateralAsset("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",true)
 
-            await controller.connect(owner).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle.address,pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)
+            await controller.connect(owner).registerIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",pool.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",20)
 
             Pool_new = await ethers.getContractFactory("MockPair")
             pool_new = await Pool_new.deploy("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC", "0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6")
             await pool_new.deployed()
-
-            Oracle_new = await ethers.getContractFactory("Oracle")
-            oracle_new = await Oracle_new.deploy(controller.address)
-            await oracle_new.deployed()
         })
 
         it("Update successfully", async () => {
-            expect(await controller.connect(owner).updateIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle_new.address,pool_new.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC")).to.be.ok
-
-            oracle = oracle_new
+            expect(await controller.connect(owner).updateIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",pool_new.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC")).to.be.ok
         })
 
         it("Only admin can call", async () => {
-            await expect(controller.connect(addr2).updateIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle_new.address,pool_new.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC")).to.be.reverted
+            await expect(controller.connect(addr2).updateIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",pool_new.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC")).to.be.reverted
         })
 
         it("Token have not been registered", async () => {
-            await expect(controller.connect(owner).updateIDOToken("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",oracle_new.address,pool_new.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC")).to.be.reverted
+            await expect(controller.connect(owner).updateIDOToken("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC",pool_new.address,"0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC")).to.be.reverted
         })
 
         it("Invalid collateral token", async () => {
-            await expect(controller.connect(owner).updateIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",oracle_new.address,pool_new.address,"0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6")).to.be.reverted
+            await expect(controller.connect(owner).updateIDOToken("0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6",pool_new.address,"0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6")).to.be.reverted
         })
     })
 
@@ -327,18 +304,6 @@ describe("Test Controller", async () => {
 
         it("Only owner can call", async () => {
             await expect(controller.connect(addr1).registerCollateralAsset("0x38E3089e83197603D3BeC5bF5D2c157f2f2d41CC", true)).to.be.reverted
-        })
-    })
-
-    describe("updatePrices", async () => {
-        it("Update prices successfully", async () => {
-            expect(await controller.connect(addr1).updatePrices(["0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6"], [10])).to.emit(controller, "UpdatePrices").withArgs(["0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6"], [10])
-            expect((await oracle.getTargetValue())[0]).to.be.equal(10)
-            expect((await controller.getOraclePrices(["0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6"]))[0][0]).to.be.equal(10)
-        })
-
-        it("Only admin can call", async () => {
-            await expect(controller.connect(addr2).updatePrices(["0x6beD53b6a43E3Df3F2ee0E081A79eA2b353CBbe6"], [10])).to.be.reverted
         })
     })
 })

@@ -72,6 +72,10 @@ contract Controller is Ownable, IController, Initializable {
         signer = _addr;
     }
 
+    function getSigner() public view returns(address) {
+        return signer;
+    }
+
     function setAdmin(address _addr) public onlyOwner notZeroAddress(_addr) {
         admins[_addr] = true;
     }
@@ -196,6 +200,7 @@ contract Controller is Ownable, IController, Initializable {
             "Invalid collateral token"
         );
         pools[tokenAddress] = poolAddress;
+        collateralForToken[tokenAddress] = collateralToken;
     }
 
     function registerCollateralAsset(
