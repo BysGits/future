@@ -309,7 +309,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         if(fee < data[id].collateralBalance) {
             collateralAmount -= fee;
             ITokenERC20(collateralAddress).safeTransfer(msg.sender, collateralAmount);
-            ITokenERC20(collateralAddress).safeTransfer(owner(), fee);
+            ITokenERC20(collateralAddress).safeTransfer(IController(controllerAddress).receiverAddress(), fee);
         }
         
         data[id].borrowBalance = 0;

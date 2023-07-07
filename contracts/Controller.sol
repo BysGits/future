@@ -10,13 +10,14 @@ contract Controller is Ownable, IController, Initializable {
     uint16 public override minCollateralRatio;
     uint16 public override maxCollateralRatio;
     uint16 public constant override calculationDecimal = 2;
+    uint16 public constant override royaltyDecimal = 4;
 
     uint256 public override lockTime;
     uint256 public override royaltyFeeRatio;
 
     address public override mintContract;
     address public override router;
-    address public override recieverAddress;
+    address public override receiverAddress;
     address public override limitOfferContract;
     address public override signer;
 
@@ -52,11 +53,19 @@ contract Controller is Ownable, IController, Initializable {
     function initialize(
         uint16 _minCollateralRatio,
         uint16 _maxCollateralRatio,
-        address _router
+        uint256 _lockTime,
+        uint256 _royaltyFeeRatio,
+        address _router,
+        address _receiverAddress,
+        address _signer
     ) external onlyOwner initializer {
         minCollateralRatio = _minCollateralRatio;
         maxCollateralRatio = _maxCollateralRatio;
+        royaltyFeeRatio = _royaltyFeeRatio;
+        lockTime = _lockTime;
         router = _router;
+        receiverAddress = _receiverAddress;
+        signer = _signer;
     }
 
     function setSigner(address _addr) public onlyOwner notZeroAddress(_addr) {
@@ -76,7 +85,7 @@ contract Controller is Ownable, IController, Initializable {
     }
 
     function setRecieverAddress(address _addr) public onlyOwner notZeroAddress(_addr) {
-        recieverAddress = _addr;
+        receiverAddress = _addr;
     }
 
     function setMinCollateralRatio(

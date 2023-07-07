@@ -9,7 +9,6 @@ describe("Test Controller", async () => {
 
     let minCollateralRatio = 150
     let maxCollateralRatio = 200
-    let ttl = 86400
     let lockTime = 1.21e+6
     let routerAddress = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 
