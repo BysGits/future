@@ -11,36 +11,36 @@ require("dotenv").config();
 const PROJECT_ID = process.env.PROJECT_ID;
 const FORK_FUJI = true;
 const FORK_MAINNET = false;
-const forkingData = FORK_FUJI
-    ? {
-          url: "https://api.avax-test.network/ext/bc/C/rpc",
-      }
-    : FORK_MAINNET
-    ? {
-          url: "https://api.avax.network/ext/bc/C/rpc",
-      }
-    : undefined;
+// const forkingData = FORK_FUJI
+//     ? {
+//           url: "https://api.avax-test.network/ext/bc/C/rpc",
+//       }
+//     : FORK_MAINNET
+//     ? {
+//           url: "https://api.avax.network/ext/bc/C/rpc",
+//       }
+//     : undefined;
 
-config.task("accounts", "Prints the list of accounts", async (args, hre) => {
-    const accounts = await hre.ethers.getSigners();
-    accounts.forEach((account) => {
-        console.log(account.address);
-    });
-});
+// config.task("accounts", "Prints the list of accounts", async (args, hre) => {
+//     const accounts = await hre.ethers.getSigners();
+//     accounts.forEach((account) => {
+//         console.log(account.address);
+//     });
+// });
 
-config.task(
-    "balances",
-    "Prints the list of AVAX account balances",
-    async (args, hre) => {
-        const accounts = await hre.ethers.getSigners();
-        for (const account of accounts) {
-            const balance = await hre.ethers.provider.getBalance(
-                account.address
-            );
-            console.log(`${account.address} has balance ${balance.toString()}`);
-        }
-    }
-);
+// config.task(
+//     "balances",
+//     "Prints the list of AVAX account balances",
+//     async (args, hre) => {
+//         const accounts = await hre.ethers.getSigners();
+//         for (const account of accounts) {
+//             const balance = await hre.ethers.provider.getBalance(
+//                 account.address
+//             );
+//             console.log(`${account.address} has balance ${balance.toString()}`);
+//         }
+//     }
+// );
 
 module.exports = {
     solidity: {

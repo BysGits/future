@@ -9,6 +9,7 @@ contract SignatureUtils {
         uint256 _kAssetAmount,
         uint256 _collateralAmount,
         uint256 _targetPrice,
+        uint256 _deadline,
         bytes memory _id
     ) public pure returns (bytes32) {
         return
@@ -18,6 +19,7 @@ contract SignatureUtils {
                     _kAssetAmount,
                     _collateralAmount,
                     _targetPrice,
+                    _deadline,
                     _id
                 )
             );
@@ -30,6 +32,7 @@ contract SignatureUtils {
         uint256 _kAssetAmount,
         uint256 _collateralAmount,
         uint256 _targetPrice,
+        uint256 _deadline,
         bytes memory _id,
         bytes memory _signature
     ) public pure returns (bool) {
@@ -38,6 +41,7 @@ contract SignatureUtils {
             _kAssetAmount,
             _collateralAmount,
             _targetPrice,
+            _deadline,
             _id
         );
         bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);

@@ -170,12 +170,15 @@ describe("Test Limit Offer", async () => {
         await register.wait()
     })
 
-    describe("setControllerAddress", async () => {
-        it("Only owner can get amount to claim", async () => {
+    describe("Get amount to claim", async () => {
+        it("Only owner can call", async () => {
             expect(await offer.connect(owner).getAmountToClaim()).to.be.equal(0)
             expect(await offer.connect(owner).getAmountToClaim()).to.be.ok
             await expect(offer.connect(addr1).getAmountToClaim()).to.be.reverted
         })
+    })
+
+    describe("setControllerAddress", async () => {
         it("Set successfully", async () => {
             expect(await offer.connect(owner).setControllerAddress(controller.address)).to.be.ok
             expect(await offer.controllerAddress()).to.be.equal(controller.address)

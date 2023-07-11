@@ -28,7 +28,8 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         address kAssetAddress;
     }
 
-    mapping(bytes => Data) public data;                         // id -> data
+    mapping(bytes => Data) public data;                 // id -> data
+    mapping(bytes => bool) public isInvalidSignature;     // signature -> bool             
 
 
     event BorrowAsset(
@@ -95,6 +96,10 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         _;
     }
 
+    function typeBorrow(bytes memory id) public view returns(uint256) {
+        return data[id].typeBorrow;
+    }
+
     function borrowBalances(bytes memory id) public view returns(uint256) {
         return data[id].borrowBalance;
     }
@@ -123,6 +128,10 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         return data[id].kAssetAddress;
     }
 
+    function blockTimestamp() public view returns(uint256) {
+        return block.timestamp;
+    }
+
     function setControllerAddress(address _controllerAddress) external onlyOwner {
         controllerAddress = _controllerAddress;
     }
@@ -147,7 +156,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
     function claimById(bytes memory id) public {
         require(msg.sender == data[id].account);
         uint256 lockTime = IController(controllerAddress).lockTime();
-        require((block.timestamp - data[id].updatedLockTime) > lockTime, "Still locking");
+        require((block.timestamp - data[id].updatedLockTime) > lockTime, "locking");
         require(data[id].userBalance > 0);
         uint256 tokenAmount = data[id].userBalance;
         address kAssetAddress = data[id].kAssetAddress;
@@ -173,16 +182,19 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         address kAssetAddress, 
         uint256 kAssetAmount, 
         uint256 collateralAmount, 
-        uint256 targetPrice, 
+        uint256 targetPrice,
+        uint256 expiredTime,
         bytes memory id, 
         bytes memory signature
     ) external nonReentrant {
         if(data[id].account == address(0)) data[id].account = msg.sender;
         if(data[id].typeBorrow == 0) data[id].typeBorrow = 1;
         {
-            require(msg.sender == data[id].account);
-            require(data[id].collateralBalance == 0);
-            require(data[id].typeBorrow == 1);
+            require(msg.sender == data[id].account, "1");
+            require(data[id].collateralBalance == 0, "2");
+            require(data[id].typeBorrow == 1, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
         }
         {
             require(
@@ -192,10 +204,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                     kAssetAmount,
                     collateralAmount,
                     targetPrice,
+                    expiredTime,
                     id,
                     signature
                 ),
-                "Verify failed"
+                "6"
             );
         }
         {
@@ -207,11 +220,12 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
         
         uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** ITokenERC20(kAssetAddress).decimals());
-        require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
+        require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "7");
         ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
         ITokenERC20(kAssetAddress).mint(msg.sender, kAssetAmount);
         data[id].borrowBalance = kAssetAmount;
         data[id].collateralBalance = collateralAmount;
+        isInvalidSignature[signature] = true;
         emit BorrowAsset(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
@@ -219,13 +233,18 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         address kAssetAddress, 
         uint256 kAssetAmount, 
         uint256 collateralAmount, 
-        uint256 targetPrice, 
+        uint256 targetPrice,
+        uint256 expiredTime,
         bytes memory id, 
         bytes memory signature
     ) public nonReentrant {
-        require(msg.sender == data[id].account);
-        require(data[id].collateralBalance > 0);
-        require(data[id].typeBorrow == 1);
+        {
+            require(msg.sender == data[id].account, "1");
+            require(data[id].collateralBalance > 0, "2");
+            require(data[id].typeBorrow == 1, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
+        }
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
         {
             require(
@@ -235,10 +254,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                     kAssetAmount,
                     collateralAmount,
                     targetPrice,
+                    expiredTime,
                     id,
                     signature
                 ),
-                "Verify failed"
+                "6"
             );
         }
         {
@@ -256,7 +276,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
             
             uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** ITokenERC20(kAssetAddress).decimals());
-            require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
+            require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "7");
         }
         
         if(collateralAmount < data[id].collateralBalance) {
@@ -270,6 +290,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         }
         
         data[id].borrowBalance = kAssetAmount;
+        isInvalidSignature[signature] = true;
         
         emit BorrowAsset(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
     }
@@ -277,11 +298,16 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
     function close(
         address kAssetAddress, 
         uint256 targetPrice, 
+        uint256 expiredTime,
         bytes memory id, 
         bytes memory signature
     ) external nonReentrant {
-        require(msg.sender == data[id].account);
-        require(data[id].collateralBalance > 0);
+        {
+            require(msg.sender == data[id].account, "1");
+            require(data[id].collateralBalance > 0, "2");
+            require(!isInvalidSignature[signature], "3");
+            require(expiredTime >= block.timestamp, "4");
+        }
         uint256 kAssetAmount = data[id].borrowBalance;
         uint256 collateralAmount = data[id].collateralBalance;
         {
@@ -292,10 +318,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                     kAssetAmount,
                     collateralAmount,
                     targetPrice,
+                    expiredTime,
                     id,
                     signature
                 ),
-                "Verify failed"
+                "5"
             );
         }
         if (kAssetAmount > 0) {
@@ -304,7 +331,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         }
         
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
-        require(collateralAddress != address(0));
         uint256 fee = targetPrice * kAssetAmount * 15 / (10 ** ITokenERC20(kAssetAddress).decimals() * 1000);
         if(fee < data[id].collateralBalance) {
             collateralAmount -= fee;
@@ -314,6 +340,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         
         data[id].borrowBalance = 0;
         data[id].collateralBalance = 0;
+        isInvalidSignature[signature] = true;
         
         emit Close(msg.sender, id, data[id].typeBorrow, kAssetAmount, collateralAmount, block.timestamp);
     }
@@ -323,7 +350,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         uint256 kAssetAmount, 
         uint256 collateralAmount,
         uint256 targetPrice,
-        uint256 deadline,
+        uint256 expiredTime,
         uint16 slippage, 
         bytes memory id,
         bytes memory signature
@@ -331,9 +358,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         if(data[id].account == address(0)) data[id].account = msg.sender;
         if(data[id].typeBorrow == 0) data[id].typeBorrow = 2;
         {
-            require(msg.sender == data[id].account); 
-            require(data[id].collateralBalance == 0);
-            require(data[id].typeBorrow == 2);
+            require(msg.sender == data[id].account, "1"); 
+            require(data[id].collateralBalance == 0, "2");
+            require(data[id].typeBorrow == 2, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
         }
         {
             require(
@@ -343,10 +372,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                     kAssetAmount,
                     collateralAmount,
                     targetPrice,
+                    expiredTime,
                     id,
                     signature
                 ),
-                "Verify failed"
+                "6"
             );
         }
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
@@ -361,6 +391,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             ITokenERC20(kAssetAddress).mint(address(this), kAssetAmount);
             data[id].borrowBalance = kAssetAmount;
             data[id].collateralBalance = collateralAmount;
+            isInvalidSignature[signature] = true;
         }
         {
             ITokenERC20(kAssetAddress).safeApprove(IController(controllerAddress).router(), kAssetAmount);
@@ -384,7 +415,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             }
             uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(kAssetAmount, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
             uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
-            IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(kAssetAmount, amountOutMin, path, address(this), deadline);
+            IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(kAssetAmount, amountOutMin, path, address(this), expiredTime);
             lock(id, ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore);
             emit Short(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
         }
@@ -395,15 +426,17 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         uint256 kAssetAmount, 
         uint256 collateralAmount, 
         uint256 targetPrice,
-        uint256 deadline, 
+        uint256 expiredTime, 
         uint16 slippage, 
         bytes memory id,
         bytes memory signature
     ) external nonReentrant {
         {
-            require(msg.sender == data[id].account); 
-            require(data[id].collateralBalance > 0);
-            require(data[id].typeBorrow == 2);
+            require(msg.sender == data[id].account, "1"); 
+            require(data[id].collateralBalance > 0, "2");
+            require(data[id].typeBorrow == 2, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
         }
         {
             require(
@@ -413,10 +446,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                     kAssetAmount,
                     collateralAmount,
                     targetPrice,
+                    expiredTime,
                     id,
                     signature
                 ),
-                "Verify failed"
+                "6"
             );
         }
         uint8 isLocked = 0;
@@ -462,7 +496,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 ITokenERC20(kAssetAddress).safeApprove(IController(controllerAddress).router(), diff);
             }
             {
-                uint256 deadline_ = deadline;
+                uint256 deadline_ = expiredTime;
                 uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
                 uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
                 IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
@@ -472,6 +506,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         }
         
         data[id].borrowBalance = kAssetAmount;
+        isInvalidSignature[signature] = true;
         
         emit EditShort(msg.sender, id, isLocked, kAssetAmount, collateralAmount, block.timestamp);
     }
@@ -480,11 +515,14 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         address kAssetAddress, 
         uint256 kAssetAmount, 
         uint256 targetPrice,
+        uint256 expiredTime,
         bytes memory id,
         bytes memory signature
     ) external nonReentrant {
-        require(data[id].borrowBalance >= kAssetAmount, "Over liquidation");
         {
+            require(data[id].borrowBalance >= kAssetAmount, "1");
+            require(!isInvalidSignature[signature], "2");
+            require(expiredTime >= block.timestamp, "3");
             require(
                 verifySignature(
                     IController(controllerAddress).signer(),
@@ -492,10 +530,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                     kAssetAmount,
                     data[id].collateralBalance,
                     targetPrice,
+                    expiredTime,
                     id,
                     signature
                 ),
-                "Verify failed"
+                "4"
             );
         }
         
@@ -510,6 +549,11 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
             / (10**calculationDecimal - discountRate);
             
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+
+        {
+            isInvalidSignature[signature] = true;
+        }
+
         if (discountedCollateralValue <= data[id].collateralBalance) {
             ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
             ITokenERC20(kAssetAddress).burn(kAssetAmount);

@@ -36,7 +36,7 @@ async function main() {
     };
 
     result = new ListModel(
-        await getDataFromUrl("https://api.dillibits.com/uPrice/")
+        await getDataFromUrl(process.env.API_PRICE)
     );
 
     var map = new Map(
