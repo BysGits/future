@@ -15,10 +15,6 @@ var increaseBlockTime = async (time) => {
     await ethers.provider.send("evm_increaseTime", [time])
 }
 
-var getCurrentTime = () => {
-    return Math.floor(Date.now() / 1000)
-}
-
 describe("Test Minter", async () => {
     let ProxyController, proxyController, ProxyMinter, proxyMinter
     let Controller, controller
@@ -146,14 +142,19 @@ describe("Test Minter", async () => {
         await setting.wait()
     })
 
-    var getSignature = async (kAssetAddress, kAssetAmount, collateralAmount, targetPrice, expiredTime, id) => {
+    var getSignature = async (kAssetAddress, targetPrice, expiredTime, id) => {
         // call to contract with parameters
-        const hash = await minter.getMessageHash(kAssetAddress, kAssetAmount, collateralAmount, targetPrice, expiredTime, id);
+        const hash = await minter.getMessageHash(kAssetAddress, targetPrice, expiredTime, id);
     
         // Sign this message hash with private key and account address
         const signature = await signer.signMessage(ethers.utils.arrayify(hash))
         return signature;
     };
+
+    var getCurrentTime = async () => {
+        var currentTime = (await minter.blockTimestamp()).toNumber()
+        return currentTime
+    }
 
     describe("setControllerAddress", async () => {
         it("Set successfully", async () => {
@@ -183,11 +184,11 @@ describe("Test Minter", async () => {
         let expTime
         let signature
 
-        it.only("Borrow successfully", async () => {
+        it("Borrow successfully", async () => {
             console.log((await minter.blockTimestamp()).toString());
-            expTime = getCurrentTime() + 100
+            expTime = await getCurrentTime() + 100
             console.log(expTime);
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x11")
+            signature = await getSignature(uToken.address, 5, expTime, "0x11")
             expect(await minter.connect(addr1).borrow(uToken.address, 100, 1000, 5, expTime, "0x11", signature)).to.be.ok
             expect(await minter.borrowBalances("0x11")).to.be.equal(100)
             expect(await minter.collateralBalances("0x11")).to.be.equal(1000)
@@ -211,12 +212,12 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call borrow with different type id", async () => {
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x9999")
+            signature = await getSignature(uToken.address, 5, expTime, "0x9999")
             await minter.connect(addr2).short(uToken.address, 100, 1000, 5, expTime, 50, "0x9999", signature)
             expect(await minter.borrowBalances("0x9999")).to.be.equal(100)
             expect(await minter.collateralBalances("0x9999")).to.be.equal(1000)
-            expTime = getCurrentTime() + 100;
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x9999")
+            expTime = await getCurrentTime() + 100;
+            signature = await getSignature(uToken.address, 5, expTime, "0x9999")
             await minter.connect(addr2).close(uToken.address, 5, expTime, "0x9999", signature)
             await expect(minter.connect(addr2).borrow(uToken.address, 100, 1000, 5, expTime, "0x9999", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x9999")).to.be.equal(0)
@@ -234,12 +235,13 @@ describe("Test Minter", async () => {
     describe("editBorrow", async () => {
         let expTime
         let signature
-        let tempSig
+        let tempSig, tempTime
 
-        it.only("Edit borrow successfully", async () => {
-            expTime = getCurrentTime() + 100
-            signature = await getSignature(uToken.address, 200, 2000, 5, expTime, "0x11")
+        it("Edit borrow successfully", async () => {
+            expTime = await getCurrentTime() + 200
+            signature = await getSignature(uToken.address, 5, expTime, "0x11")
             tempSig = signature
+            tempTime = expTime
             expect(await minter.borrowBalances("0x11")).to.be.equal(100)
             expect(await minter.collateralBalances("0x11")).to.be.equal(1000)
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(1000100)
@@ -268,8 +270,8 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call borrow with different type id", async () => {
-            expTime = getCurrentTime() + 100
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x9999")
+            expTime = await getCurrentTime() + 100
+            signature = await getSignature(uToken.address, 5, expTime, "0x9999")
             await minter.connect(addr2).short(uToken.address, 100, 1000, 5, expTime, 50, "0x9999", signature)
             expect(await minter.borrowBalances("0x9999")).to.be.equal(100)
             expect(await minter.collateralBalances("0x9999")).to.be.equal(1000)
@@ -277,30 +279,29 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call edit borrow when expired", async () => {
-            expTime = getCurrentTime() - 1
-            signature = await getSignature(uToken.address, 100, 1500, 5, expTime, "0x11")
+            expTime = await getCurrentTime() - 1
+            signature = await getSignature(uToken.address, 5, expTime, "0x11")
             await expect(minter.connect(addr1).editBorrow(uToken.address, 100, 1500, 5, expTime, "0x11", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x11")).to.be.equal(200)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000)
         })
 
         it("Cannot call edit borrow when signature invalid", async () => {
-            expTime = getCurrentTime() + 100
-            await expect(minter.connect(addr1).editBorrow(uToken.address, 200, 2000, 5, expTime, "0x11", tempSig)).to.be.reverted
+            await expect(minter.connect(addr1).editBorrow(uToken.address, 200, 2000, 5, tempTime, "0x11", tempSig)).to.be.reverted
             expect(await minter.borrowBalances("0x11")).to.be.equal(200)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000)
         })
 
         it("Cannot call edit borrow when verify signature failed", async () => {
-            expTime = getCurrentTime() + 100
-            signature = await getSignature(uToken.address, 100, 1500, 5, expTime, "0x11")
+            expTime = await getCurrentTime() + 100
+            signature = await getSignature(uToken.address, 5, expTime, "0x1111")
             await expect(minter.connect(addr1).editBorrow(uToken.address, 100, 1600, 5, expTime, "0x11", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x11")).to.be.equal(200)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000)
         })
 
         it("Less than min collateral ratio", async () => {
-            signature = await getSignature(uToken.address, 100, 749, 5, expTime, "0x11")
+            signature = await getSignature(uToken.address, 5, expTime, "0x11")
             await expect(minter.connect(addr1).editBorrow(uToken.address, 100, 749, 5, expTime, "0x11", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x11")).to.be.equal(200)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000)
@@ -312,9 +313,9 @@ describe("Test Minter", async () => {
         let expTime
         let signature
 
-        it.only("Short successfully", async () => {
-            expTime = getCurrentTime() + 100
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x33")
+        it("Short successfully", async () => {
+            expTime = await getCurrentTime() + 100
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
             expect(await minter.connect(addr1).short(uToken.address, 100, 1000, 5, expTime, 50, "0x33", signature)).to.emit(minter, "Short").withArgs(addr1.address, "0x33", 100, 1000, ((new Date().getTime() )/ 1000).before())
             expect(await minter.borrowBalances("0x33")).to.be.equal(100)
             expect(await minter.collateralBalances("0x33")).to.be.equal(1000)
@@ -339,14 +340,14 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call short with different type id", async () => {
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x999999")
+            signature = await getSignature(uToken.address, 5, expTime, "0x999999")
             tx = await minter.connect(addr2).borrow(uToken.address, 100, 1000, 5, expTime, "0x999999", signature)
             await tx.wait()
             expect(await minter.borrowBalances("0x999999")).to.be.equal(100)
             expect(await minter.collateralBalances("0x999999")).to.be.equal(1000)
 
-            expTime = getCurrentTime() + 1000
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x999999")
+            expTime = await getCurrentTime() + 1000
+            signature = await getSignature(uToken.address, 5, expTime, "0x999999")
             tx = await minter.connect(addr2).close(uToken.address, 5, expTime, "0x999999", signature)
             await tx.wait()
             
@@ -356,7 +357,7 @@ describe("Test Minter", async () => {
         })
 
         it("Less than min collateral ratio", async () => {
-            signature = await getSignature(uToken.address, 100, 749, 5, expTime, "0x44")
+            signature = await getSignature(uToken.address, 5, expTime, "0x44")
             await expect(minter.connect(addr1).short(uToken.address, 100, 749, 5, expTime, 50, "0x44", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x44")).to.be.equal(0)
             expect(await minter.collateralBalances("0x44")).to.be.equal(0)
@@ -364,7 +365,7 @@ describe("Test Minter", async () => {
         })
 
         it("Greater than min collateral ratio", async () => {
-            signature = await getSignature(uToken.address, 100, 1501, 5, expTime, "0x44")
+            signature = await getSignature(uToken.address, 5, expTime, "0x44")
             await expect(minter.connect(addr1).short(uToken.address, 100, 1501, 5, expTime, 50, "0x44", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x44")).to.be.equal(0)
             expect(await minter.collateralBalances("0x44")).to.be.equal(0)
@@ -376,9 +377,9 @@ describe("Test Minter", async () => {
         let expTime
         let signature
 
-        it.only("Edit short successfully", async () => {
-            expTime = getCurrentTime() + 100
-            signature = await getSignature(uToken.address, 200, 2000, 5, expTime, "0x33")
+        it("Edit short successfully", async () => {
+            expTime = await getCurrentTime() + 101
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
 
             expect(await minter.borrowBalances("0x33")).to.be.equal(100)
             expect(await minter.collateralBalances("0x33")).to.be.equal(1000)
@@ -397,7 +398,7 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call edit short the same id with different account", async () => {
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x33")
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
             await expect(minter.connect(addr2).editShort(uToken.address, 100, 1000, 5, expTime, 50, "0x33", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x33")).to.be.equal(200)
             expect(await minter.collateralBalances("0x33")).to.be.equal(2000)
@@ -411,18 +412,18 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call edit short with different type id", async () => {
-            signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x999999")
+            signature = await getSignature(uToken.address, 5, expTime, "0x999999")
             await minter.connect(addr2).borrow(uToken.address, 100, 1000, 5, expTime, "0x999999", signature)
             expect(await minter.borrowBalances("0x999999")).to.be.equal(100)
             expect(await minter.collateralBalances("0x999999")).to.be.equal(1000)
 
-            expTime = getCurrentTime() + 1000
+            expTime = await getCurrentTime() + 1000
             signature = await getSignature(uToken.address, 100, 1000, 5, expTime, "0x999999")
             await expect(minter.connect(addr2).editShort(uToken.address, 100, 1000, 5, expTime, 50, "0x999999", signature)).to.be.reverted
         })
 
         it("Less than min collateral ratio", async () => {
-            signature = await getSignature(uToken.address, 100, 749, 5, expTime, "0x33")
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
             await expect(minter.connect(addr1).editShort(uToken.address, 100, 749, 5, expTime, 50, "0x33", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x33")).to.be.equal(200)
             expect(await minter.collateralBalances("0x33")).to.be.equal(2000)
@@ -431,7 +432,7 @@ describe("Test Minter", async () => {
         })
 
         it("Greater than min collateral ratio", async () => {
-            signature = await getSignature(uToken.address, 100, 1501, 5, expTime, "0x33")
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
             await expect(minter.connect(addr1).editShort(uToken.address, 100, 1501, 5, expTime, 50, "0x33", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x33")).to.be.equal(200)
             expect(await minter.collateralBalances("0x33")).to.be.equal(2000)
@@ -443,12 +444,12 @@ describe("Test Minter", async () => {
     describe("close", async () => {
         let expTime, signature
 
-        it.only("Close successfully", async () => {
+        it("Close successfully", async () => {
             var uTokenBalance = (await uToken.balanceOf(addr1.address)).toNumber() - (await minter.borrowBalances("0x33")).toNumber()
             var collateralBalances = (await eurb.balanceOf(addr1.address)).toNumber() + (await minter.collateralBalances("0x33")).toNumber() - 5 * (await minter.borrowBalances("0x33")).toNumber() * 0.015
 
-            expTime = getCurrentTime() + 123
-            signature = await getSignature(uToken.address, 200, 2000, 5, expTime, "0x33")
+            expTime = await getCurrentTime() + 123
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
             expect(await minter.connect(addr1).close(uToken.address, 5, expTime, "0x33", signature)).to.emit(minter, "Close").withArgs(addr1.address, "0x33", 200, 985, ((new Date().getTime() )/ 1000).before())
             expect(await minter.borrowBalances("0x33")).to.be.equal(0)
             expect(await minter.collateralBalances("0x33")).to.be.equal(0)
@@ -457,59 +458,50 @@ describe("Test Minter", async () => {
         })
 
         it("Cannot call close with different account", async () => {
-            signature = await getSignature(uToken.address, 200, 2000, 5, expTime, "0x11")
+            signature = await getSignature(uToken.address, 5, expTime, "0x11")
             await expect(minter.connect(addr2).close(uToken.address, 5, expTime, "0x11")).to.be.reverted
             expect(await minter.borrowBalances("0x11")).to.be.equal(200)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000)
         })
 
         it("Cannot call close with unexisted id", async () => {
-            signature = await getSignature(uToken.address, 0, 0, 5, expTime, "0x33")
+            signature = await getSignature(uToken.address, 5, expTime, "0x33")
             await expect(minter.connect(addr1).close(uToken.address, "0x33")).to.be.reverted
 
-            signature = await getSignature(uToken.address, 0, 0, 5, expTime, "0x44")
+            signature = await getSignature(uToken.address, 5, expTime, "0x44")
             await expect(minter.connect(addr1).close(uToken.address, "0x44")).to.be.reverted
         })
     })
 
-    describe.only("liquidation", async () => {
-        it("Liquidation successfully", async () => {
-            await oracle.connect(owner).update(7)
-            expect(await minter.connect(addr2).liquidation(addr1.address, uToken.address, 100, "0x11")).to.emit(minter, "Liquidation").withArgs(addr2.address, addr1.address, "0x11", 100, 765, ((new Date().getTime() )/ 1000).before())
-            expect(await minter.borrowBalances("0x11")).to.be.equal(100)
-            expect(await minter.collateralBalances("0x11")).to.be.equal(2000 - 765)
-        })
+    describe("liquidation", async () => {
+        let expTime, signature
 
-        it("Wrong account to be liquidated", async () => {
-            await expect(minter.connect(addr2).liquidation(addr3.address, uToken.address, 100, "0x11")).to.be.reverted
+        it("Liquidation successfully", async () => {
+            expTime = await getCurrentTime() + 101
+            signature = await getSignature(uToken.address, 7, expTime, "0x11")
+            expect(await minter.connect(addr2).liquidation(uToken.address, 100, 7, expTime, "0x11", signature)).to.emit(minter, "Liquidation").withArgs(addr2.address, addr1.address, "0x11", 100, 765, ((new Date().getTime() )/ 1000).before())
             expect(await minter.borrowBalances("0x11")).to.be.equal(100)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000 - 765)
         })
 
         it("Over liquidation", async () => {
-            await expect(minter.connect(addr2).liquidation(addr1.address, uToken.address, 201, "0x11")).to.be.reverted
+            expTime = await getCurrentTime() + 102
+            signature = await getSignature(uToken.address, 5, expTime, "0x11")
+            await expect(minter.connect(addr2).liquidation(uToken.address, 201, 5, expTime, "0x11", signature)).to.be.reverted
             expect(await minter.borrowBalances("0x11")).to.be.equal(100)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000 - 765)
         })
 
         it("Cannot liquidate if more than min collateral ratio", async () => {
-            await expect(minter.connect(addr2).liquidation(addr1.address, uToken.address, 1, "0x11")).to.be.revertedWith("More than min")
+            await expect(minter.connect(addr2).liquidation(uToken.address, 1, 5, expTime, "0x11", signature)).to.be.revertedWith("More than min")
             expect(await minter.borrowBalances("0x11")).to.be.equal(100)
             expect(await minter.collateralBalances("0x11")).to.be.equal(2000 - 765)
-        })
-
-        it("Target price is not updated", async () => {
-            await oracle.connect(owner).update(5)
-            await minter.connect(addr1).borrow(uToken.address, 100, 1200, "0x55")
-            await oracle.connect(owner).update(10)
-            await increaseBlockTime(86401)
-            await expect(minter.connect(addr2).liquidation(addr1.address, uToken.address, 1, "0x55")).to.be.reverted
-            expect(await minter.borrowBalances("0x55")).to.be.equal(100)
-            expect(await minter.collateralBalances("0x55")).to.be.equal(1200)
         })
     })
 
     describe("claimById", async () => {
+        let expTime, signature
+
         it("Claim successfully", async () => {
             await increaseBlockTime(1.21e+6)
             expect(await minter.connect(addr1).claimById("0x33")).to.emit(minter, "ClaimToken").withArgs(addr1.address, "0x33", 1000, ((new Date().getTime() )/ 1000).before())
@@ -524,10 +516,12 @@ describe("Test Minter", async () => {
         })
 
         it("Still locking", async () => {
-            await oracle.connect(owner).update(5)
-            var deadline = ((new Date().getTime() )/ 1000).before() + 1000
-            await minter.connect(addr1).short(uToken.address, 100, 1000, deadline, 50, "0x66")
-            await expect(minter.connect(addr1).claimById("0x66")).to.be.revertedWith("Still locking")
+            expTime = await getCurrentTime() + 103
+            console.log((await minter.blockTimestamp()).toString());
+            console.log(expTime);
+            signature = await getSignature(uToken.address, 5, expTime, "0x66")
+            await minter.connect(addr1).short(uToken.address, 100, 1000, 5, expTime, 50, "0x66", signature)
+            await expect(minter.connect(addr1).claimById("0x66")).to.be.revertedWith("locking")
             expect(await minter.userBalances("0x66")).to.be.equal(500)
             expect(await minter.totalClaimedById("0x66")).to.be.equal(0)
         })
@@ -538,9 +532,12 @@ describe("Test Minter", async () => {
     })
 
     describe("claimAll", async () => {
+        let expTime, signature
+
         it("Claim all successfully", async () => {
-            var deadline = ((new Date().getTime() )/ 1000).before() + 1000
-            var short = await minter.connect(addr1).short(uToken.address, 100, 1000, deadline, 50, "0x77")
+            expTime = await getCurrentTime() + 102
+            signature = await getSignature(uToken.address, 5, expTime, "0x77")
+            var short = await minter.connect(addr1).short(uToken.address, 100, 1000, 5, expTime, 50, "0x77", signature)
             await short.wait()
 
             await increaseBlockTime(1.21e+6)

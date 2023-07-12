@@ -6,8 +6,6 @@ pragma solidity ^0.8.7;
 contract SignatureUtils {
     function getMessageHash(
         address _kAssetAddress,
-        uint256 _kAssetAmount,
-        uint256 _collateralAmount,
         uint256 _targetPrice,
         uint256 _deadline,
         bytes memory _id
@@ -16,8 +14,6 @@ contract SignatureUtils {
             keccak256(
                 abi.encodePacked(
                     _kAssetAddress,
-                    _kAssetAmount,
-                    _collateralAmount,
                     _targetPrice,
                     _deadline,
                     _id
@@ -29,8 +25,6 @@ contract SignatureUtils {
     function verifySignature(
         address _signer,
         address _kAssetAddress,
-        uint256 _kAssetAmount,
-        uint256 _collateralAmount,
         uint256 _targetPrice,
         uint256 _deadline,
         bytes memory _id,
@@ -38,8 +32,6 @@ contract SignatureUtils {
     ) public pure returns (bool) {
         bytes32 messageHash = getMessageHash(
             _kAssetAddress,
-            _kAssetAmount,
-            _collateralAmount,
             _targetPrice,
             _deadline,
             _id

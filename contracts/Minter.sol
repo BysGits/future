@@ -116,7 +116,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         return data[id].updatedLockTime;
     }
 
-    function totalClaimed(bytes memory id) public view returns(uint256) {
+    function totalClaimedById(bytes memory id) public view returns(uint256) {
         return data[id].totalClaimed;
     }
 
@@ -201,8 +201,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 verifySignature(
                     IController(controllerAddress).signer(),
                     kAssetAddress,
-                    kAssetAmount,
-                    collateralAmount,
                     targetPrice,
                     expiredTime,
                     id,
@@ -251,8 +249,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 verifySignature(
                     IController(controllerAddress).signer(),
                     kAssetAddress,
-                    kAssetAmount,
-                    collateralAmount,
                     targetPrice,
                     expiredTime,
                     id,
@@ -315,8 +311,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 verifySignature(
                     IController(controllerAddress).signer(),
                     kAssetAddress,
-                    kAssetAmount,
-                    collateralAmount,
                     targetPrice,
                     expiredTime,
                     id,
@@ -369,8 +363,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 verifySignature(
                     IController(controllerAddress).signer(),
                     kAssetAddress,
-                    kAssetAmount,
-                    collateralAmount,
                     targetPrice,
                     expiredTime,
                     id,
@@ -443,8 +435,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 verifySignature(
                     IController(controllerAddress).signer(),
                     kAssetAddress,
-                    kAssetAmount,
-                    collateralAmount,
                     targetPrice,
                     expiredTime,
                     id,
@@ -527,8 +517,6 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
                 verifySignature(
                     IController(controllerAddress).signer(),
                     kAssetAddress,
-                    kAssetAmount,
-                    data[id].collateralBalance,
                     targetPrice,
                     expiredTime,
                     id,
