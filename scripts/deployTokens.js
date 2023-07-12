@@ -158,7 +158,7 @@ async function main() {
                     `${token.address}`,
                     "",
                     "",
-                    process.env.EURB_ADDRESS,
+                    process.env.USDT_ADDRESS,
                     10,
                 ]);
                 console.log(`${array[i]} : ` + token.address);
@@ -183,7 +183,7 @@ async function main() {
                     `${token.address}`,
                     "",
                     "",
-                    process.env.EURB_ADDRESS,
+                    process.env.USDT_ADDRESS,
                     10,
                 ]);
 

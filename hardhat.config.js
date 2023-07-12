@@ -137,7 +137,8 @@ module.exports = {
             goerli: process.env.ETHERSCAN_API,
             bscTestnet: process.env.BSCSCAN_API,
             polygonMumbai: process.env.POLYGON_API,
-            avalancheFujiTestnet: process.env.AVALANCHE,
+            avalancheFujiTestnet: process.env.AVALANCHE_API,
+            avalanche: process.env.AVALANCHE_API,
         },
     },
     paths: {

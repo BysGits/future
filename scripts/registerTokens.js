@@ -8,7 +8,7 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    var array = ["uBVS", "uONON", "uAESI", "uINCY", "uCTKB"]; // list of name of tokens
+    var array = ["uBVS"]; // list of name of tokens
 
     var contracts;
 
@@ -117,7 +117,7 @@ async function main() {
     var oracleMap = new Map(oracles);
 
     var tokenAddresses = [];
-    var oracleAddresses = [];
+    // var oracleAddresses = [];
     var poolAddresses = [];
     var collateralTokens = [];
     var discountRates = [];
@@ -126,16 +126,16 @@ async function main() {
     if (array.length > 0) {
         for (i = 0; i < array.length; i++) {
             if (
-                oracleMap.get(array[i])[1] != "" &&
+                oracleMap.get(array[i])[0] != "" &&
                 oracleMap.get(array[i])[2] != ""
             ) {
                 tokenAddress = oracleMap.get(array[i])[0];
-                oracleAddress = oracleMap.get(array[i])[1];
+                // oracleAddress = oracleMap.get(array[i])[1];
                 poolAddress = oracleMap.get(array[i])[2];
                 collateralToken = oracleMap.get(array[i])[3];
                 discountRate = oracleMap.get(array[i])[4];
                 tokenAddresses.push(tokenAddress);
-                oracleAddresses.push(oracleAddress);
+                // oracleAddresses.push(oracleAddress);
                 poolAddresses.push(poolAddress);
                 collateralTokens.push(collateralToken);
                 discountRates.push(discountRate);
@@ -144,14 +144,14 @@ async function main() {
     } else {
         array = Array.from(oracleMap);
         for (i = 0; i < array.length; i++) {
-            if (array[i][1][1] != "" && array[i][1][2] != "") {
+            if (array[i][1][0] != "" && array[i][1][2] != "") {
                 tokenAddress = array[i][1][0];
-                oracleAddress = array[i][1][1];
+                // oracleAddress = array[i][1][1];
                 poolAddress = array[i][1][2];
                 collateralToken = array[i][1][3];
                 discountRate = array[i][1][4];
                 tokenAddresses.push(tokenAddress);
-                oracleAddresses.push(oracleAddress);
+                // oracleAddresses.push(oracleAddress);
                 poolAddresses.push(poolAddress);
                 collateralTokens.push(collateralToken);
                 discountRates.push(discountRate);
@@ -161,7 +161,7 @@ async function main() {
 
     register = await controller.registerIDOTokens(
         tokenAddresses,
-        oracleAddresses,
+        // oracleAddresses,
         poolAddresses,
         collateralTokens,
         discountRates

@@ -28,33 +28,22 @@ async function main() {
         .initialize(
             process.env.MIN_COLLATERAL_RATIO,
             process.env.MAX_COLLATERAL_RATIO,
-            process.env.UPDATE_PRICE_CYCLE,
-            process.env.SUSHISWAP_V2_ROUTER_FUJI
+            process.env.LOCK_TIME,
+            process.env.ROYALTY_FEE_RATIO,
+            process.env.SUSHISWAP_V2_ROUTER_FUJI,
+            deployer.address,
+            deployer.address
         );
     await initializing.wait();
 
     console.log("Controller initialized");
 
-    lockTime = await controller
-        .connect(deployer)
-        .setLockTime(process.env.LOCK_TIME);
-    await lockTime.wait();
-
-    console.log("Lock time set");
-
-    royalty = await controller
-        .connect(deployer)
-        .setRoyaltyFeeRatio(process.env.ROYALTY_FEE_RATIO);
-    await royalty.wait();
-
-    console.log("Royalty fee ratio set");
-
     register = await controller
         .connect(deployer)
-        .registerCollateralAsset(process.env.EURB_ADDRESS, true);
+        .registerCollateralAsset(process.env.USDT_ADDRESS, true);
     await register.wait();
 
-    console.log("EURB registered");
+    console.log("USDT registered");
 
     admins = JSON.parse(fs.readFileSync("./scripts/data/adminList.json"));
 

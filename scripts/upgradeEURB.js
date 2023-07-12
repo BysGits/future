@@ -15,7 +15,7 @@ async function main() {
     console.log("EURB deployed: " + eurb.address);
 
     ProxyEURB = await ethers.getContractFactory("ProxyEURB");
-    proxyEURB = await ProxyEURB.attach(process.env.EURB_ADDRESS);
+    proxyEURB = await ProxyEURB.attach(process.env.USDT_ADDRESS);
     await proxyEURB.deployed();
 
     upgrade = await proxyEURB.upgradeTo(eurb.address);
