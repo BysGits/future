@@ -8,7 +8,7 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    array = ["uBVS"]; // list of name of tokens
+    array = ["kTSLA"]; // list of name of tokens
 
     var contracts;
 
@@ -147,8 +147,8 @@ async function main() {
                 tokenMap.set(array[i], 1);
                 Token = await ethers.getContractFactory("ERC20Token");
                 token = await Token.deploy(
-                    'k' + array[i].substring(1),
-                    'k' + array[i].substring(1),
+                    array[i],
+                    array[i],
                     supply,
                     contracts.minter
                 );

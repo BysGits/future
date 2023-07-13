@@ -13,7 +13,7 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    var array = ["uBVS"]; // list of name of tokens
+    var array = ["kTSLA"]; // list of name of tokens
 
     var Router = await ethers.getContractFactory("UniswapV2Router02");
     var router = await Router.attach(process.env.SUSHISWAP_V2_ROUTER_FUJI);
@@ -102,10 +102,7 @@ async function main() {
                 token = await Token.attach(oracleMap.get(array[i])[0]);
                 await token.deployed();
 
-                console.log("check");
-
                 eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * parseInt(process.env.UASSET_PER_POOL)).toString();
-                console.log("check");
 
                 uAssetAmount = ethers.BigNumber.from(parseInt(process.env.UASSET_PER_POOL)).mul(ethers.BigNumber.from(Math.pow(10, await token.decimals()).toString())).toString();
 
