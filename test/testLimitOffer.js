@@ -196,8 +196,8 @@ describe("Test Limit Offer", async () => {
         it("Offer successfully", async () => {
             expect(await offer.connect(addr1).offerBuy(uToken.address, 100, 400, "0x11")).to.emit(offer, "Offer").withArgs(addr1.address, uToken.address, "0x11", 100, 400, ((new Date().getTime() )/ 1000).before())
             expect((await offer.orders("0x11")).offerCollateralAmount).to.be.equal(400)
-            expect((await offer.orders("0x11")).offerUAssetAmount).to.be.equal(100)
-            expect((await offer.orders("0x11")).uAssetAddress).to.be.equal(uToken.address)
+            expect((await offer.orders("0x11")).offerKAssetAmount).to.be.equal(100)
+            expect((await offer.orders("0x11")).kAssetAddress).to.be.equal(uToken.address)
             expect((await offer.orders("0x11")).userAddress).to.be.equal(addr1.address)
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(999600)
         })
@@ -205,8 +205,8 @@ describe("Test Limit Offer", async () => {
         it("Still being offered to buy", async () => {
             await expect(offer.connect(addr1).offerBuy(uToken.address, 100, 300, "0x11")).to.be.reverted
             expect((await offer.orders("0x11")).offerCollateralAmount).to.be.equal(400)
-            expect((await offer.orders("0x11")).offerUAssetAmount).to.be.equal(100)
-            expect((await offer.orders("0x11")).uAssetAddress).to.be.equal(uToken.address)
+            expect((await offer.orders("0x11")).offerKAssetAmount).to.be.equal(100)
+            expect((await offer.orders("0x11")).kAssetAddress).to.be.equal(uToken.address)
             expect((await offer.orders("0x11")).userAddress).to.be.equal(addr1.address)
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(999600)
         })
@@ -216,8 +216,8 @@ describe("Test Limit Offer", async () => {
         it("Offer successfully", async () => {
             expect(await offer.connect(addr1).offerSell(uToken.address, 100, 700, "0x22")).to.emit(offer, "Offer").withArgs(addr1.address, uToken.address, "0x22", 100, 700, ((new Date().getTime() )/ 1000).before())
             expect((await offer.orders("0x22")).offerCollateralAmount).to.be.equal(700)
-            expect((await offer.orders("0x22")).offerUAssetAmount).to.be.equal(100)
-            expect((await offer.orders("0x22")).uAssetAddress).to.be.equal(uToken.address)
+            expect((await offer.orders("0x22")).offerKAssetAmount).to.be.equal(100)
+            expect((await offer.orders("0x22")).kAssetAddress).to.be.equal(uToken.address)
             expect((await offer.orders("0x22")).userAddress).to.be.equal(addr1.address)
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(999900)
         })
@@ -225,8 +225,8 @@ describe("Test Limit Offer", async () => {
         it("Still being offered to sell", async () => {
             await expect(offer.connect(addr1).offerSell(uToken.address, 100, 800, "0x22")).to.be.reverted
             expect((await offer.orders("0x22")).offerCollateralAmount).to.be.equal(700)
-            expect((await offer.orders("0x22")).offerUAssetAmount).to.be.equal(100)
-            expect((await offer.orders("0x22")).uAssetAddress).to.be.equal(uToken.address)
+            expect((await offer.orders("0x22")).offerKAssetAmount).to.be.equal(100)
+            expect((await offer.orders("0x22")).kAssetAddress).to.be.equal(uToken.address)
             expect((await offer.orders("0x22")).userAddress).to.be.equal(addr1.address)
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(999900)
         })
@@ -239,7 +239,7 @@ describe("Test Limit Offer", async () => {
             uTokenBalance = parseInt(uTokenBalance)
             expect(await offer.connect(owner).buyNow("2000000000",0, "0x11")).to.be.ok
             expect((await offer.orders("0x11")).offerCollateralAmount).to.be.equal(0)
-            expect((await offer.orders("0x11")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x11")).offerKAssetAmount).to.be.equal(0)
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(999600)
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(uTokenBalance)
         })
@@ -258,11 +258,11 @@ describe("Test Limit Offer", async () => {
     describe("sellNow", async () => {
         var eurbBalance
         it("Sell successfully", async () => {
-            eurbBalance = parseInt(await eurb.balanceOf(addr1.address)) + parseInt((await offer.orders("0x22")).offerUAssetAmount * 5)
+            eurbBalance = parseInt(await eurb.balanceOf(addr1.address)) + parseInt((await offer.orders("0x22")).offerKAssetAmount * 5)
             eurbBalance = parseInt(eurbBalance)
             expect(await offer.connect(owner).sellNow("2000000000",0, "0x22")).to.be.ok
             expect((await offer.orders("0x22")).offerCollateralAmount).to.be.equal(0)
-            expect((await offer.orders("0x22")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x22")).offerKAssetAmount).to.be.equal(0)
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(eurbBalance)
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(999980)
         })
@@ -315,7 +315,7 @@ describe("Test Limit Offer", async () => {
         })
 
         it("Sell successfully", async () => {
-            eurbBalance = parseInt(await eurb.balanceOf(addr1.address)) + parseInt((await offer.orders("0x2211")).offerUAssetAmount * 5) * 2
+            eurbBalance = parseInt(await eurb.balanceOf(addr1.address)) + parseInt((await offer.orders("0x2211")).offerKAssetAmount * 5) * 2
             eurbBalance = parseInt(eurbBalance)
             expect(await offer.connect(owner).sell("2000000000",[0,0], ["0x2211", "0x2212"])).to.be.ok
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(eurbBalance)
@@ -349,14 +349,14 @@ describe("Test Limit Offer", async () => {
             expect(await offer.connect(addr1).withDrawBuy("0x1113")).to.be.ok
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(eurbBalance)
             expect((await offer.orders("0x1113")).offerCollateralAmount).to.be.equal(0)
-            expect((await offer.orders("0x1113")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x1113")).offerKAssetAmount).to.be.equal(0)
         })
 
         it("Caller is not the one offered", async () => {
             await expect(offer.connect(addr2).withDrawBuy("0x1113")).to.be.reverted
             expect(await eurb.balanceOf(addr1.address)).to.be.equal(eurbBalance)
             expect((await offer.orders("0x1113")).offerCollateralAmount).to.be.equal(0)
-            expect((await offer.orders("0x1113")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x1113")).offerKAssetAmount).to.be.equal(0)
         })
 
         it("No offer to be withdrawn", async () => {
@@ -384,22 +384,22 @@ describe("Test Limit Offer", async () => {
             expect(await offer.connect(addr1).withDrawSell("0x2213")).to.be.ok
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(uTokenBalance)
             expect((await offer.orders("0x2213")).offerCollateralAmount).to.be.equal(0)
-            expect((await offer.orders("0x2213")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x2213")).offerKAssetAmount).to.be.equal(0)
         })
 
         it("Caller is not the one offered", async () => {
             await expect(offer.connect(addr2).withDrawSell("0x2213")).to.be.reverted
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(uTokenBalance)
             expect((await offer.orders("0x2213")).offerCollateralAmount).to.be.equal(0)
-            expect((await offer.orders("0x2213")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x2213")).offerKAssetAmount).to.be.equal(0)
         })
 
         it("No offer to be withdrawn", async () => {
             await expect(offer.connect(addr1).withDrawSell("0x2213")).to.be.reverted
             await expect(offer.connect(addr1).withDrawSell("0x2214")).to.be.reverted
             expect(await uToken.balanceOf(addr1.address)).to.be.equal(uTokenBalance)
-            expect((await offer.orders("0x2213")).offerUAssetAmount).to.be.equal(0)
-            expect((await offer.orders("0x2214")).offerUAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x2213")).offerKAssetAmount).to.be.equal(0)
+            expect((await offer.orders("0x2214")).offerKAssetAmount).to.be.equal(0)
         })
     })
 

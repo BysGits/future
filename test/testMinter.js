@@ -1,5 +1,7 @@
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
+const Web3 = require("web3")
+const web3 = new Web3()
 
 Number.prototype.before = function () {
     var value = parseInt(this.toString().split(".")[0], 10);//before
@@ -32,8 +34,10 @@ describe("Test Minter", async () => {
     let royaltyFeeRatio = 80
 
     before(async () => {
-        [owner, addr1, addr2, addr3, signer, ...addrs] = await ethers.getSigners();
+        [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
         console.log(`Owner: ${owner.address} \nAcc1: ${addr1.address} \nAcc2: ${addr2.address}`);
+
+        signer = new ethers.Wallet("d060dfffaf9e005655fd7e979007a3bb09a82ea3e82217aca79b44599e686b8c")
 
         Router = await ethers.getContractFactory("MockRouter1_5")
         router = await Router.deploy()
@@ -145,7 +149,7 @@ describe("Test Minter", async () => {
     var getSignature = async (kAssetAddress, targetPrice, expiredTime, id) => {
         // call to contract with parameters
         const hash = await minter.getMessageHash(kAssetAddress, targetPrice, expiredTime, id);
-    
+        console.log(hash);
         // Sign this message hash with private key and account address
         const signature = await signer.signMessage(ethers.utils.arrayify(hash))
         return signature;
@@ -189,6 +193,19 @@ describe("Test Minter", async () => {
             expTime = await getCurrentTime() + 100
             console.log(expTime);
             signature = await getSignature(uToken.address, 5, expTime, "0x11")
+            // const data = web3.utils.soliditySha3(
+            //     { type: 'address', value: "0xF9182C93B477232Eb09fe593d1Cf99a9382E08f7" },
+            //     { type: 'uint256', value: "294069000" },
+            //     { type: 'uint256', value: "1689564671" },
+            //     { type: 'bytes', value: "0x63646339383439623332633533346163623233383737303438307d31363839353634333134333133" },
+            // );
+            // console.log(data);
+            // signature = web3.eth.accounts.sign(
+            //     data,
+            //     "d060dfffaf9e005655fd7e979007a3bb09a82ea3e82217aca79b44599e686b8c",
+            // );
+            // signature = await getSignature("0xF9182C93B477232Eb09fe593d1Cf99a9382E08f7", "294069000000000", "1689564671", "0x63646339383439623332633533346163623233383737303438307d31363839353634333134333133")
+            // console.log(signature);
             expect(await minter.connect(addr1).borrow(uToken.address, 100, 1000, 5, expTime, "0x11", signature)).to.be.ok
             expect(await minter.borrowBalances("0x11")).to.be.equal(100)
             expect(await minter.collateralBalances("0x11")).to.be.equal(1000)

@@ -19,8 +19,8 @@ contract LimitOffer is Ownable, ReentrancyGuard {
 
     struct Order {
         uint256 offerCollateralAmount;
-        uint256 offerUAssetAmount;
-        address uAssetAddress;
+        uint256 offerKAssetAmount;
+        address kAssetAddress;
         address userAddress;
     }
     mapping(bytes => Order) public orders;     // id -> order
@@ -29,18 +29,18 @@ contract LimitOffer is Ownable, ReentrancyGuard {
 
     event Offer(
         address indexed userAddress,
-        address indexed uAssetAddress,
+        address indexed kAssetAddress,
         bytes id,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp
     );
 
     event WithDraw(
         address indexed userAddress,
-        address indexed uAssetAddress,
+        address indexed kAssetAddress,
         bytes id,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp
     );
@@ -63,11 +63,11 @@ contract LimitOffer is Ownable, ReentrancyGuard {
         controllerAddress = _controllerAddress;
     }
 
-    function offerBuy(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
+    function offerBuy(address kAssetAddress, uint256 kAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
         Order storage order = orders[id];
         require(order.offerCollateralAmount == 0, "Still being offered to buy");
 
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
 
         offerFee[id] = collateralAmount * IController(controllerAddress).royaltyFeeRatio() / (10 ** IController(controllerAddress).royaltyDecimal());
         
@@ -76,33 +76,33 @@ contract LimitOffer is Ownable, ReentrancyGuard {
         
         order.offerCollateralAmount = collateralAmount;
         
-        order.offerUAssetAmount = uAssetAmount;
-        order.uAssetAddress = uAssetAddress;
+        order.offerKAssetAmount = kAssetAmount;
+        order.kAssetAddress = kAssetAddress;
         order.userAddress = msg.sender;
 
-        emit Offer(msg.sender, uAssetAddress, id, uAssetAmount, collateralAmount, block.timestamp);
+        emit Offer(msg.sender, kAssetAddress, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function offerSell(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
+    function offerSell(address kAssetAddress, uint256 kAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
         uint256 royaltyFee = IController(controllerAddress).royaltyFeeRatio();
         
         {
-            address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
+            address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
             offerFee[id] = collateralAmount * royaltyFee / (10 ** IController(controllerAddress).royaltyDecimal());
 
             ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), offerFee[id]);
 
-            ITokenERC20(uAssetAddress).safeTransferFrom(msg.sender, address(this), uAssetAmount);
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
         }
         
         Order storage order = orders[id];
-        require(order.offerUAssetAmount == 0, "Still being offered to sell");
+        require(order.offerKAssetAmount == 0, "Still being offered to sell");
         order.offerCollateralAmount = collateralAmount;
-        order.offerUAssetAmount = uAssetAmount;
-        order.uAssetAddress = uAssetAddress;
+        order.offerKAssetAmount = kAssetAmount;
+        order.kAssetAddress = kAssetAddress;
         order.userAddress = msg.sender;
 
-        emit Offer(msg.sender, uAssetAddress, id, uAssetAmount, collateralAmount, block.timestamp);
+        emit Offer(msg.sender, kAssetAddress, id, kAssetAmount, collateralAmount, block.timestamp);
     }
     
     function buy(uint256 deadline, uint256[] memory amountOutMin, bytes[] memory ids) external onlyAdmin {
@@ -124,16 +124,16 @@ contract LimitOffer is Ownable, ReentrancyGuard {
     function buyNow(uint256 deadline, uint256 amountOutMin, bytes memory id) public nonReentrant onlyAdmin {
         Order storage order = orders[id];
         uint256 collateralAmount = order.offerCollateralAmount;
-        // address uAssetAddress = order.uAssetAddress;
+        // address kAssetAddress = order.kAssetAddress;
         // address user = order.userAddress;
         uint256 amountOut;
         {
-            address collateralAddress = IController(controllerAddress).collateralForToken(order.uAssetAddress);
+            address collateralAddress = IController(controllerAddress).collateralForToken(order.kAssetAddress);
             address[] memory path = new address[](2);
             // uint256 deadline_ = deadline;
             // uint256 amountOutMin_ = amountOutMin;
             {
-                address poolAddress = IController(controllerAddress).pools(order.uAssetAddress);
+                address poolAddress = IController(controllerAddress).pools(order.kAssetAddress);
                 
                 path[0] = collateralAddress;
                 path[1] = IUniswapV2Pair(poolAddress).token1();
@@ -150,16 +150,16 @@ contract LimitOffer is Ownable, ReentrancyGuard {
             amountOut = ITokenERC20(path[1]).balanceOf(order.userAddress) - balanceBefore;
         }
         order.offerCollateralAmount = 0;
-        order.offerUAssetAmount = 0;
+        order.offerKAssetAmount = 0;
         amountToClaim += offerFee[id];
 
-        emit Offer(msg.sender, order.uAssetAddress, id, amountOut, collateralAmount, block.timestamp);
+        emit Offer(msg.sender, order.kAssetAddress, id, amountOut, collateralAmount, block.timestamp);
     }
 
     function sellNow(uint256 deadline, uint256 amountOutMin, bytes memory id) public nonReentrant onlyAdmin {
         Order storage order = orders[id];
-        uint256 uAssetAmount = order.offerUAssetAmount;
-        // address uAssetAddress = order.uAssetAddress;
+        uint256 kAssetAmount = order.offerKAssetAmount;
+        // address kAssetAddress = order.kAssetAddress;
         // address user = order.userAddress;
         // uint256 deadline_ = deadline;
         uint256 collateralAmount;
@@ -167,63 +167,63 @@ contract LimitOffer is Ownable, ReentrancyGuard {
             address[] memory path = new address[](2);
             
             {
-                address poolAddress = IController(controllerAddress).pools(order.uAssetAddress);
+                address poolAddress = IController(controllerAddress).pools(order.kAssetAddress);
                 
-                path[0] = order.uAssetAddress;
+                path[0] = order.kAssetAddress;
                 path[1] = IUniswapV2Pair(poolAddress).token1();
-                if (path[1] == order.uAssetAddress) {
+                if (path[1] == order.kAssetAddress) {
                     path[1] = IUniswapV2Pair(poolAddress).token0();
                 }
             }
-            ITokenERC20(order.uAssetAddress).safeApprove(IController(controllerAddress).router(), uAssetAmount);
+            ITokenERC20(order.kAssetAddress).safeApprove(IController(controllerAddress).router(), kAssetAmount);
 
             uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(order.userAddress);
-            IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(uAssetAmount, amountOutMin, path, order.userAddress, deadline);
+            IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(kAssetAmount, amountOutMin, path, order.userAddress, deadline);
             collateralAmount = ITokenERC20(path[1]).balanceOf(order.userAddress) - balanceBefore;
         }
         order.offerCollateralAmount = 0;
-        order.offerUAssetAmount = 0;
+        order.offerKAssetAmount = 0;
         amountToClaim += offerFee[id];
 
-        emit Offer(msg.sender, order.uAssetAddress, id, uAssetAmount, collateralAmount, block.timestamp);
+        emit Offer(msg.sender, order.kAssetAddress, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
     function withDrawBuy(bytes memory id) external nonReentrant {
         Order storage order = orders[id];
         uint256 collateralAmount = order.offerCollateralAmount;
-        uint256 uAssetAmount = order.offerUAssetAmount;
-        // address uAssetAddress = order.uAssetAddress;
+        uint256 kAssetAmount = order.offerKAssetAmount;
+        // address kAssetAddress = order.kAssetAddress;
         // address user = order.userAddress;
         
         require(msg.sender == order.userAddress, "Caller is not the one offered");
-        require(collateralAmount > 0 && uAssetAmount > 0, "No offer to be withdrawn");
+        require(collateralAmount > 0 && kAssetAmount > 0, "No offer to be withdrawn");
         
-        address collateralAddress = IController(controllerAddress).collateralForToken(order.uAssetAddress);
+        address collateralAddress = IController(controllerAddress).collateralForToken(order.kAssetAddress);
         ITokenERC20(collateralAddress).safeTransfer(msg.sender, collateralAmount);
         ITokenERC20(collateralAddress).safeTransfer(msg.sender, offerFee[id]);
         order.offerCollateralAmount = 0;
-        order.offerUAssetAmount = 0;
+        order.offerKAssetAmount = 0;
 
-        emit WithDraw(msg.sender, order.uAssetAddress, id, uAssetAmount, collateralAmount, block.timestamp);
+        emit WithDraw(msg.sender, order.kAssetAddress, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
     function withDrawSell(bytes memory id) external nonReentrant {
         Order storage order = orders[id];
         uint256 collateralAmount = order.offerCollateralAmount;
-        uint256 uAssetAmount = order.offerUAssetAmount;
-        // address uAssetAddress = order.uAssetAddress;
+        uint256 kAssetAmount = order.offerKAssetAmount;
+        // address kAssetAddress = order.kAssetAddress;
         // address user = order.userAddress;
-        address collateralAddress = IController(controllerAddress).collateralForToken(order.uAssetAddress);
+        address collateralAddress = IController(controllerAddress).collateralForToken(order.kAssetAddress);
         
         require(msg.sender == order.userAddress, "Caller is not the one offered");
-        require(collateralAmount > 0 && uAssetAmount > 0, "No offer to be withdrawn");
+        require(collateralAmount > 0 && kAssetAmount > 0, "No offer to be withdrawn");
 
-        ITokenERC20(order.uAssetAddress).safeTransfer(msg.sender, uAssetAmount);
+        ITokenERC20(order.kAssetAddress).safeTransfer(msg.sender, kAssetAmount);
         ITokenERC20(collateralAddress).safeTransfer(msg.sender, offerFee[id]);
         order.offerCollateralAmount = 0;
-        order.offerUAssetAmount = 0;
+        order.offerKAssetAmount = 0;
 
-        emit WithDraw(msg.sender, order.uAssetAddress, id, uAssetAmount, collateralAmount, block.timestamp);
+        emit WithDraw(msg.sender, order.kAssetAddress, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
     function claim(address collateralAddress) external onlyOwner {
