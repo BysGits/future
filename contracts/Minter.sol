@@ -29,8 +29,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
     }
 
     mapping(bytes => Data) public data;                 // id -> data
-    mapping(bytes => bool) public isInvalidSignature;     // signature -> bool             
-
+    mapping(bytes => bool) public isInvalidSignature;     // signature -> bool    
 
     event BorrowAsset(
         address indexed userAddress,
@@ -88,8 +87,7 @@ contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
         bytes[] ids
     );
 
-    constructor() {
-    }
+    constructor() {}
 
     modifier onlyAdmin() {
         require(IController(controllerAddress).admins(msg.sender) || msg.sender == owner(), "Only admin");
