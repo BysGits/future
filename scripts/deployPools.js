@@ -102,9 +102,9 @@ async function main() {
                 token = await Token.attach(oracleMap.get(array[i])[0]);
                 await token.deployed();
 
-                eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * parseInt(process.env.UASSET_PER_POOL)).toString();
+                eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * parseInt(process.env.KASSET_PER_POOL)).toString();
 
-                uAssetAmount = ethers.BigNumber.from(parseInt(process.env.UASSET_PER_POOL)).mul(ethers.BigNumber.from(Math.pow(10, await token.decimals()).toString())).toString();
+                uAssetAmount = ethers.BigNumber.from(parseInt(process.env.KASSET_PER_POOL)).mul(ethers.BigNumber.from(Math.pow(10, await token.decimals()).toString())).toString();
 
                 approve = await token.increaseAllowance(
                     router.address,
@@ -164,8 +164,8 @@ async function main() {
                 // get euro price
                 //targetPrice = priceMap.get(array[i][0])[1]
 
-                eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * process.env.UASSET_PER_POOL).toString();
-                uAssetAmount = (parseInt(process.env.UASSET_PER_POOL) * Math.pow(10, await token.decimals())).toString();
+                eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * process.env.KASSET_PER_POOL).toString();
+                uAssetAmount = (parseInt(process.env.KASSET_PER_POOL) * Math.pow(10, await token.decimals())).toString();
                 
                 time = new Date().getTime() / 1000 + 100000;
                 addLiquidity = await router.addLiquidity(
