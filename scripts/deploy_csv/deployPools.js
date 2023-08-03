@@ -163,7 +163,7 @@ async function main() {
             }
 
             Eurb = await ethers.getContractFactory("ERC20Token");
-            eurb = await Eurb.attach(process.env.EURB_ADDRESS);
+            eurb = await Eurb.attach(process.env.USDT_ADDRESS);
             await eurb.deployed();
 
             if (
@@ -179,7 +179,7 @@ async function main() {
 
             addLiquidity = await router.addLiquidity(
                 token.address,
-                process.env.EURB_ADDRESS,
+                process.env.USDT_ADDRESS,
                 uAssetAmount,
                 eurbAmount,
                 0,
@@ -195,7 +195,7 @@ async function main() {
 
             pool = await factory.getPair(
                 token.address,
-                process.env.EURB_ADDRESS
+                process.env.USDT_ADDRESS
             );
 
             json[i].POOLADDRESS = pool;

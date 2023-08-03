@@ -168,10 +168,10 @@ contract EURB is Ownable, AccessControl, ERC20Burnable, Pausable {
     }
 
     function mint(address account, uint256 amount) public whenNotPaused {
-        require(
-            hasRole(MINTER_ROLE, _msgSender()),
-            "EURB: Caller is not a minter"
-        );
+        // require(
+        //     hasRole(MINTER_ROLE, _msgSender()),
+        //     "EURB: Caller is not a minter"
+        // );
         _mint(account, amount);
         emit Mint(account, amount);
     }

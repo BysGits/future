@@ -13,7 +13,7 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    var array = ["uBVS", "uONON", "uAESI", "uINCY", "uCTKB"]; // list of name of tokens
+    var array = ["kTSLA"]; // list of name of tokens
 
     var Router = await ethers.getContractFactory("UniswapV2Router02");
     var router = await Router.attach(process.env.SUSHISWAP_V2_ROUTER_FUJI);
@@ -92,29 +92,25 @@ async function main() {
                 // get euro price
                 //targetPrice = priceMap.get(array[i])[1].toString()
 
-                eurbAmount = ethers.utils
-                    .parseEther(targetPrice)
-                    .mul(process.env.UASSET_PER_POOL)
-                    .toString();
-                uAssetAmount = ethers.utils
-                    .parseEther(process.env.UASSET_PER_POOL)
-                    .toString();
-
                 time = (new Date().getTime() / 1000).before() + 100000;
+
+                Eurb = await ethers.getContractFactory("BridgeToken");
+                eurb = await Eurb.attach(process.env.USDT_ADDRESS);
+                await eurb.deployed();
 
                 Token = await ethers.getContractFactory("ERC20Token");
                 token = await Token.attach(oracleMap.get(array[i])[0]);
                 await token.deployed();
+
+                eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * parseInt(process.env.UASSET_PER_POOL)).toString();
+
+                uAssetAmount = ethers.BigNumber.from(parseInt(process.env.UASSET_PER_POOL)).mul(ethers.BigNumber.from(Math.pow(10, await token.decimals()).toString())).toString();
 
                 approve = await token.increaseAllowance(
                     router.address,
                     uAssetAmount
                 );
                 await approve.wait();
-
-                Eurb = await ethers.getContractFactory("ERC20Token");
-                eurb = await Eurb.attach(process.env.EURB_ADDRESS);
-                await eurb.deployed();
 
                 approve = await eurb.increaseAllowance(
                     router.address,
@@ -124,7 +120,7 @@ async function main() {
 
                 addLiquidity = await router.addLiquidity(
                     tokenAddress,
-                    process.env.EURB_ADDRESS,
+                    process.env.USDT_ADDRESS,
                     uAssetAmount,
                     eurbAmount,
                     0,
@@ -142,7 +138,7 @@ async function main() {
 
                 pool = await factory.getPair(
                     tokenAddress,
-                    process.env.EURB_ADDRESS
+                    process.env.USDT_ADDRESS
                 );
                 console.log(`--- ${array[i]} : ` + pool);
 
@@ -168,16 +164,15 @@ async function main() {
                 // get euro price
                 //targetPrice = priceMap.get(array[i][0])[1]
 
-                uAssetAmount = ethers.utils
-                    .parseEther(process.env.UASSET_PER_POOL)
-                    .mul(targetPrice)
-                    .toString();
+                eurbAmount = (parseFloat(targetPrice) * Math.pow(10, await eurb.decimals()) * process.env.UASSET_PER_POOL).toString();
+                uAssetAmount = (parseInt(process.env.UASSET_PER_POOL) * Math.pow(10, await token.decimals())).toString();
+                
                 time = new Date().getTime() / 1000 + 100000;
                 addLiquidity = await router.addLiquidity(
                     tokenAddress,
-                    process.env.EURB_ADDRESS,
+                    process.env.USDT_ADDRESS,
                     uAssetAmount,
-                    process.env.EURB_PER_POOL,
+                    eurbAmount,
                     0,
                     0,
                     deployer.address,
@@ -193,7 +188,7 @@ async function main() {
 
                 pool = await factory.getPair(
                     tokenAddress,
-                    process.env.EURB_ADDRESS
+                    process.env.USDT_ADDRESS
                 );
                 console.log(`${array[i][0]} : ` + pool);
 

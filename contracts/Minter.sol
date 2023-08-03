@@ -1,40 +1,40 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
 import {IController} from "./interfaces/IController.sol";
-import {IOracle} from "./interfaces/IOracle.sol";
 import {Ownable} from "./Ownable.sol";
-import {IEURB} from "./interfaces/IEURB.sol";
+import {SignatureUtils} from "./utils/SignatureUtils.sol";
+import {ITokenERC20} from "./interfaces/ITokenERC20.sol";
 
-
-contract Minter is Ownable, ReentrancyGuard {
-    using SafeERC20 for IEURB;
+contract Minter is Ownable, ReentrancyGuard, SignatureUtils {
+    using SafeERC20 for ITokenERC20;
     
     address public controllerAddress;
-    address public lockAddress;
 
-    // mapping token address to target priceAPIConsumer
-    mapping(address => uint256) public targetPrices;
+    struct Data {
+        uint8 typeBorrow;
+        uint256 borrowBalance;
+        uint256 collateralBalance;
+        uint256 userBalance;
+        uint256 updatedLockTime;
+        uint256 totalClaimed;
+        address account;
+        address kAssetAddress;
+    }
 
-    mapping(bytes =>  uint256) public borrowBalances;          // id -> uAsset ballance
-    mapping(bytes =>  uint256) public collateralBalances;      // id -> collateral ballance
-    
-    mapping(bytes => address) public accounts;                  // id -> account
-    mapping(bytes => uint256) public userBalances;              // id -> user balance locked
-    mapping(bytes => uint256) public updatedLockTime;           // id -> updated time
-    mapping(bytes => uint8) public typeBorrow;                  // id -> 1: borrow, 2: short
-    mapping(bytes => uint256) public totalClaimedById;          // id -> total amount claimed
-    mapping(bytes => address) public uAssetAddressById;         // id -> uAssetAddress
+    mapping(bytes => Data) public data;                 // id -> data
+    mapping(bytes => bool) public isInvalidSignature;     // signature -> bool    
 
     event BorrowAsset(
         address indexed userAddress,
         bytes id,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp
     );
@@ -43,7 +43,7 @@ contract Minter is Ownable, ReentrancyGuard {
         address indexed userAddress,
         bytes id,
         uint8 typeId,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp
     );
@@ -51,7 +51,7 @@ contract Minter is Ownable, ReentrancyGuard {
     event Short(
         address indexed userAddress,
         bytes id,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp
     );
@@ -60,7 +60,7 @@ contract Minter is Ownable, ReentrancyGuard {
         address indexed userAddress,
         bytes id,
         uint8 isLocked,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp
     );
@@ -69,7 +69,7 @@ contract Minter is Ownable, ReentrancyGuard {
         address indexed buyer,
         address indexed account,
         bytes id,
-        uint256 uAssetAmount,
+        uint256 kAssetAmount,
         uint256 collateralAmount,
         uint256 timestamp,
         uint256 discountRate
@@ -87,360 +87,515 @@ contract Minter is Ownable, ReentrancyGuard {
         bytes[] ids
     );
 
-    constructor() {
-    }
+    constructor() {}
 
     modifier onlyAdmin() {
         require(IController(controllerAddress).admins(msg.sender) || msg.sender == owner(), "Only admin");
         _;
     }
 
+    function typeBorrow(bytes memory id) public view returns(uint256) {
+        return data[id].typeBorrow;
+    }
+
+    function borrowBalances(bytes memory id) public view returns(uint256) {
+        return data[id].borrowBalance;
+    }
+
+    function collateralBalances(bytes memory id) public view returns(uint256) {
+        return data[id].collateralBalance;
+    }
+
+    function userBalances(bytes memory id) public view returns(uint256) {
+        return data[id].userBalance;
+    }
+
+    function updatedLockTime(bytes memory id) public view returns(uint256) {
+        return data[id].updatedLockTime;
+    }
+
+    function totalClaimedById(bytes memory id) public view returns(uint256) {
+        return data[id].totalClaimed;
+    }
+
+    function accounts(bytes memory id) public view returns(address) {
+        return data[id].account;
+    }
+
+    function kAssetAddressById(bytes memory id) public view returns(address) {
+        return data[id].kAssetAddress;
+    }
+
+    function blockTimestamp() public view returns(uint256) {
+        return block.timestamp;
+    }
+
     function setControllerAddress(address _controllerAddress) external onlyOwner {
         controllerAddress = _controllerAddress;
     }
 
-    function addMoreCollateralAmount(address uAssetAddress, uint256 collateralAmount, bytes memory id) external onlyAdmin {
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
-        collateralBalances[id] += (collateralAmount - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), collateralAmount));
+    function addMoreCollateralAmount(address kAssetAddress, uint256 collateralAmount, bytes memory id) external onlyAdmin {
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+        ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
+        data[id].collateralBalance += collateralAmount;
     }
     
     function lock(bytes memory id, uint256 tokenAmount) internal {
-        userBalances[id] += tokenAmount;
-        updatedLockTime[id] = block.timestamp;
+        data[id].userBalance += tokenAmount;
+        data[id].updatedLockTime = block.timestamp;
     } 
     
     function isClaimable(bytes memory id) external view returns (bool){
         uint256 lockTime = IController(controllerAddress).lockTime();
-        if(updatedLockTime[id] == 0) return false;
-        return (block.timestamp - updatedLockTime[id] > lockTime);
+        if(data[id].updatedLockTime == 0) return false;
+        return (block.timestamp - data[id].updatedLockTime > lockTime);
     }
 
     function claimById(bytes memory id) public {
-        require(msg.sender == accounts[id]);
+        require(msg.sender == data[id].account);
         uint256 lockTime = IController(controllerAddress).lockTime();
-        require((block.timestamp - updatedLockTime[id]) > lockTime, "Still locking");
-        require(userBalances[id] > 0);
-        uint256 tokenAmount = userBalances[id];
-        address uAssetAddress = uAssetAddressById[id];
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        IEURB(collateralAddress).safeTransfer(msg.sender, tokenAmount);
-        totalClaimedById[id] += tokenAmount;
-        delete userBalances[id];
-        delete updatedLockTime[id];
+        require((block.timestamp - data[id].updatedLockTime) > lockTime, "locking");
+        require(data[id].userBalance > 0);
+        uint256 tokenAmount = data[id].userBalance;
+        address kAssetAddress = data[id].kAssetAddress;
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+        ITokenERC20(collateralAddress).safeTransfer(msg.sender, tokenAmount);
+        data[id].totalClaimed += tokenAmount;
+        delete data[id].userBalance;
+        delete data[id].updatedLockTime;
         emit ClaimToken(msg.sender, id, tokenAmount, block.timestamp);
     }
     
     function claimAll(bytes[] memory ids) external nonReentrant {
         uint256 lockTime = IController(controllerAddress).lockTime();
         for(uint256 i = 0; i < ids.length; i++) {
-            if(block.timestamp - updatedLockTime[ids[i]] > lockTime && userBalances[ids[i]] > 0) {
+            if(block.timestamp - data[ids[i]].updatedLockTime > lockTime && data[ids[i]].userBalance > 0) {
                 claimById(ids[i]);
             }
         }
         emit ClaimAll(msg.sender, ids);
     }
 
-    function borrow(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
-        if(accounts[id] == address(0)) accounts[id] = msg.sender;
-        if(typeBorrow[id] == 0) typeBorrow[id] = 1;
+    function borrow(
+        address kAssetAddress, 
+        uint256 kAssetAmount, 
+        uint256 collateralAmount, 
+        uint256 targetPrice,
+        uint256 expiredTime,
+        bytes memory id, 
+        bytes memory signature
+    ) external nonReentrant {
+        if(data[id].account == address(0)) data[id].account = msg.sender;
+        if(data[id].typeBorrow == 0) data[id].typeBorrow = 1;
         {
-            require(msg.sender == accounts[id]);
-            require(collateralBalances[id] == 0);
-            require(typeBorrow[id] == 1);
+            require(msg.sender == data[id].account, "1");
+            require(data[id].collateralBalance == 0, "2");
+            require(data[id].typeBorrow == 1, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
         }
         {
-            uAssetAddressById[id] = uAssetAddress;
+            require(
+                verifySignature(
+                    IController(controllerAddress).signer(),
+                    kAssetAddress,
+                    targetPrice,
+                    expiredTime,
+                    id,
+                    signature
+                ),
+                "6"
+            );
         }
-        uint256 ttl = IController(controllerAddress).ttl();
+        {
+            data[id].kAssetAddress = kAssetAddress;
+        }
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
         uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
-
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-        require(block.timestamp - updatedTime <= ttl, "Target price is not updated");
         
-        uint256 realCollateralAmount = (targetPrice * uAssetAmount) / (10 ** IEURB(uAssetAddress).decimals());
-        require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
-        IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
-        IEURB(uAssetAddress).mint(msg.sender, uAssetAmount);
-        borrowBalances[id] = uAssetAmount;
-        collateralBalances[id] = collateralAmount - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), collateralAmount);
-        emit BorrowAsset(msg.sender, id, uAssetAmount, collateralAmount, block.timestamp);
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+        
+        uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** ITokenERC20(kAssetAddress).decimals());
+        require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "7");
+        ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
+        ITokenERC20(kAssetAddress).mint(msg.sender, kAssetAmount);
+        data[id].borrowBalance = kAssetAmount;
+        data[id].collateralBalance = collateralAmount;
+        isInvalidSignature[signature] = true;
+        emit BorrowAsset(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function editBorrow(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, bytes memory id) public nonReentrant {
-        require(msg.sender == accounts[id]);
-        require(collateralBalances[id] > 0);
-        require(typeBorrow[id] == 1);
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-        
+    function editBorrow(
+        address kAssetAddress, 
+        uint256 kAssetAmount, 
+        uint256 collateralAmount, 
+        uint256 targetPrice,
+        uint256 expiredTime,
+        bytes memory id, 
+        bytes memory signature
+    ) public nonReentrant {
         {
-            uint256 ttl = IController(controllerAddress).ttl();
-            
-            
-            if(block.timestamp - updatedTime > ttl) {
-                require(uAssetAmount == borrowBalances[id], "Outside of market hour");
-            } else {
-                if(uAssetAmount < borrowBalances[id]) {
-                    uint256 diff = borrowBalances[id] - uAssetAmount;
-                    IEURB(uAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
-                    IEURB(uAssetAddress).burn(diff);
-                } else if (uAssetAmount > borrowBalances[id]) {
-                    uint256 diff = uAssetAmount - borrowBalances[id];
-                    IEURB(uAssetAddress).mint(msg.sender, diff);
-                }
+            require(msg.sender == data[id].account, "1");
+            require(data[id].collateralBalance > 0, "2");
+            require(data[id].typeBorrow == 1, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
+        }
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+        {
+            require(
+                verifySignature(
+                    IController(controllerAddress).signer(),
+                    kAssetAddress,
+                    targetPrice,
+                    expiredTime,
+                    id,
+                    signature
+                ),
+                "6"
+            );
+        }
+        {
+            if(kAssetAmount < data[id].borrowBalance) {
+                uint256 diff = data[id].borrowBalance - kAssetAmount;
+                ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
+                ITokenERC20(kAssetAddress).burn(diff);
+            } else if (kAssetAmount > data[id].borrowBalance) {
+                uint256 diff = kAssetAmount - data[id].borrowBalance;
+                ITokenERC20(kAssetAddress).mint(msg.sender, diff);
             }
         }
         {
             uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
             uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
             
-            uint256 realCollateralAmount = (targetPrice * uAssetAmount) / (10 ** IEURB(uAssetAddress).decimals());
-            require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
+            uint256 realCollateralAmount = (targetPrice * kAssetAmount) / (10 ** ITokenERC20(kAssetAddress).decimals());
+            require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "7");
         }
         
-        if(collateralAmount < collateralBalances[id]) {
-            uint256 diff = collateralBalances[id] - collateralAmount;
-            IEURB(collateralAddress).safeTransfer(msg.sender, diff);
-            collateralBalances[id] = collateralAmount;
-        } else if(collateralAmount > collateralBalances[id]){
-            uint256 diff = collateralAmount - collateralBalances[id];
-            IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
-            collateralBalances[id] += (diff - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), diff));
+        if(collateralAmount < data[id].collateralBalance) {
+            uint256 diff = data[id].collateralBalance - collateralAmount;
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, diff);
+            data[id].collateralBalance = collateralAmount;
+        } else if(collateralAmount > data[id].collateralBalance){
+            uint256 diff = collateralAmount - data[id].collateralBalance;
+            ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
+            data[id].collateralBalance += diff;
         }
         
-        borrowBalances[id] = uAssetAmount;
+        data[id].borrowBalance = kAssetAmount;
+        isInvalidSignature[signature] = true;
         
-        emit BorrowAsset(msg.sender, id, uAssetAmount, collateralAmount, block.timestamp);
+        emit BorrowAsset(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function close(address uAssetAddress, bytes memory id) external nonReentrant {
-        require(msg.sender == accounts[id]);
-        require(collateralBalances[id] > 0);
-        uint256 uAssetAmount = borrowBalances[id];
-        uint256 collateralAmount = collateralBalances[id];
-        if (uAssetAmount > 0) {
-            IEURB(uAssetAddress).safeTransferFrom(msg.sender, address(this), uAssetAmount);
-            IEURB(uAssetAddress).burn(uAssetAmount);
+    function close(
+        address kAssetAddress, 
+        uint256 targetPrice, 
+        uint256 expiredTime,
+        bytes memory id, 
+        bytes memory signature
+    ) external nonReentrant {
+        {
+            require(msg.sender == data[id].account, "1");
+            require(data[id].collateralBalance > 0, "2");
+            require(!isInvalidSignature[signature], "3");
+            require(expiredTime >= block.timestamp, "4");
+        }
+        uint256 kAssetAmount = data[id].borrowBalance;
+        uint256 collateralAmount = data[id].collateralBalance;
+        {
+            require(
+                verifySignature(
+                    IController(controllerAddress).signer(),
+                    kAssetAddress,
+                    targetPrice,
+                    expiredTime,
+                    id,
+                    signature
+                ),
+                "5"
+            );
+        }
+        if (kAssetAmount > 0) {
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
+            ITokenERC20(kAssetAddress).burn(kAssetAmount);
         }
         
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        require(collateralAddress != address(0));
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        (uint256 targetPrice, ) = IOracle(oracleAddress).getTargetValue();
-        uint256 fee = targetPrice * uAssetAmount * 15 / (10 ** IEURB(uAssetAddress).decimals() * 1000);
-        if(fee < collateralBalances[id]) {
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+        uint256 fee = targetPrice * kAssetAmount * 15 / (10 ** ITokenERC20(kAssetAddress).decimals() * 1000);
+        if(fee < data[id].collateralBalance) {
             collateralAmount -= fee;
-            IEURB(collateralAddress).safeTransfer(msg.sender, collateralAmount);
-            IEURB(collateralAddress).safeTransfer(owner(), fee);
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, collateralAmount);
+            ITokenERC20(collateralAddress).safeTransfer(IController(controllerAddress).receiverAddress(), fee);
         }
         
-        borrowBalances[id] = 0;
-        collateralBalances[id] = 0;
+        data[id].borrowBalance = 0;
+        data[id].collateralBalance = 0;
+        isInvalidSignature[signature] = true;
         
-        emit Close(msg.sender, id, typeBorrow[id], uAssetAmount, collateralAmount, block.timestamp);
+        emit Close(msg.sender, id, data[id].typeBorrow, kAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function short(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount,uint256 deadline, uint16 slippage, bytes memory id) external nonReentrant {
-        if(accounts[id] == address(0)) accounts[id] = msg.sender;
-        if(typeBorrow[id] == 0) typeBorrow[id] = 2;
+    function short(
+        address kAssetAddress, 
+        uint256 kAssetAmount, 
+        uint256 collateralAmount,
+        uint256 targetPrice,
+        uint256 expiredTime,
+        uint16 slippage, 
+        bytes memory id,
+        bytes memory signature
+    ) external nonReentrant {
+        if(data[id].account == address(0)) data[id].account = msg.sender;
+        if(data[id].typeBorrow == 0) data[id].typeBorrow = 2;
         {
-            require(msg.sender == accounts[id]); 
-            require(collateralBalances[id] == 0);
-            require(typeBorrow[id] == 2);
-        }
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        {
-            uAssetAddressById[id] = uAssetAddress;
-        }
-        {
-            uint256 ttl = IController(controllerAddress).ttl();
-            address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-            (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-            _checkShort(uAssetAddress, updatedTime, ttl, targetPrice, uAssetAmount, collateralAmount);
-        }
-        {
-            IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
-            IEURB(uAssetAddress).mint(address(this), uAssetAmount);
-            borrowBalances[id] = uAssetAmount;
-            collateralBalances[id] = collateralAmount - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), collateralAmount);
+            require(msg.sender == data[id].account, "1"); 
+            require(data[id].collateralBalance == 0, "2");
+            require(data[id].typeBorrow == 2, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
         }
         {
-            IEURB(uAssetAddress).safeApprove(IController(controllerAddress).router(), uAssetAmount);
+            require(
+                verifySignature(
+                    IController(controllerAddress).signer(),
+                    kAssetAddress,
+                    targetPrice,
+                    expiredTime,
+                    id,
+                    signature
+                ),
+                "6"
+            );
+        }
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+        {
+            data[id].kAssetAddress = kAssetAddress;
+        }
+
+        _checkShort(kAssetAddress, targetPrice, kAssetAmount, collateralAmount);
+        
+        {
+            ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), collateralAmount);
+            ITokenERC20(kAssetAddress).mint(address(this), kAssetAmount);
+            data[id].borrowBalance = kAssetAmount;
+            data[id].collateralBalance = collateralAmount;
+            isInvalidSignature[signature] = true;
+        }
+        {
+            ITokenERC20(kAssetAddress).safeApprove(IController(controllerAddress).router(), kAssetAmount);
         }
         {
             address[] memory path = new address[](2);
             uint[] memory reserve = new uint[](2);
             {
-                address poolAddress = IController(controllerAddress).pools(uAssetAddress);
-                address token0 = IUniswapV2Pair(poolAddress).token0();
-                address token1 = IUniswapV2Pair(poolAddress).token1();
+                address poolAddress = IController(controllerAddress).pools(kAssetAddress);
                 (uint reserve0, uint reserve1,) = IUniswapV2Pair(poolAddress).getReserves();
                 
-                path[0] = uAssetAddress;
-                path[1] = token1;
+                path[0] = kAssetAddress;
+                path[1] = IUniswapV2Pair(poolAddress).token1();
                 reserve[0] = reserve0;
                 reserve[1] = reserve1;
-                if (token1 == uAssetAddress) {
-                    path[1] = token0;
+                if (path[1] == kAssetAddress) {
+                    path[1] = IUniswapV2Pair(poolAddress).token0();
                     reserve[0] = reserve1;
                     reserve[1] = reserve0;
                 }
             }
-            bytes memory id_ = id;
-            uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(uAssetAmount, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
-            uint256 balanceBefore = IEURB(path[1]).balanceOf(address(this));
-            IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(uAssetAmount, amountOutMin, path, address(this), deadline);
-            uint256 amountOut = IEURB(path[1]).balanceOf(address(this)) - balanceBefore;
-            lock(id_, amountOut);
-            emit Short(msg.sender, id_, uAssetAmount, collateralAmount, block.timestamp);
+            uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(kAssetAmount, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
+            uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
+            IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(kAssetAmount, amountOutMin, path, address(this), expiredTime);
+            lock(id, ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore);
+            emit Short(msg.sender, id, kAssetAmount, collateralAmount, block.timestamp);
         }
     }
     
-    function editShort(address uAssetAddress, uint256 uAssetAmount, uint256 collateralAmount, uint256 deadline, uint16 slippage, bytes memory id) external nonReentrant {
+    function editShort(
+        address kAssetAddress, 
+        uint256 kAssetAmount, 
+        uint256 collateralAmount, 
+        uint256 targetPrice,
+        uint256 expiredTime, 
+        uint16 slippage, 
+        bytes memory id,
+        bytes memory signature
+    ) external nonReentrant {
         {
-            require(msg.sender == accounts[id]); 
-            require(collateralBalances[id] > 0);
-            require(typeBorrow[id] == 2);
+            require(msg.sender == data[id].account, "1"); 
+            require(data[id].collateralBalance > 0, "2");
+            require(data[id].typeBorrow == 2, "3");
+            require(!isInvalidSignature[signature], "4");
+            require(expiredTime >= block.timestamp, "5");
+        }
+        {
+            require(
+                verifySignature(
+                    IController(controllerAddress).signer(),
+                    kAssetAddress,
+                    targetPrice,
+                    expiredTime,
+                    id,
+                    signature
+                ),
+                "6"
+            );
         }
         uint8 isLocked = 0;
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        uint256 ttl = IController(controllerAddress).ttl();
-        address oracleAddress = IController(controllerAddress).oracles(uAssetAddress);
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(oracleAddress).getTargetValue();
-        {
-            _checkShort(uAssetAddress, updatedTime, ttl, targetPrice, uAssetAmount, collateralAmount);
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+
+        _checkShort(kAssetAddress, targetPrice, kAssetAmount, collateralAmount);
+
+        if(collateralAmount < data[id].collateralBalance) {
+            uint256 diff = data[id].collateralBalance - collateralAmount;
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, diff);
+            data[id].collateralBalance = collateralAmount;
+        } else if(collateralAmount > data[id].collateralBalance){
+            uint256 diff = collateralAmount - data[id].collateralBalance;
+            ITokenERC20(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
+            data[id].collateralBalance += diff;
         }
 
-        if(collateralAmount < collateralBalances[id]) {
-            uint256 diff = collateralBalances[id] - collateralAmount;
-            IEURB(collateralAddress).safeTransfer(msg.sender, diff);
-            collateralBalances[id] = collateralAmount;
-        } else if(collateralAmount > collateralBalances[id]){
-            uint256 diff = collateralAmount - collateralBalances[id];
-            IEURB(collateralAddress).safeTransferFrom(msg.sender, address(this), diff);
-            collateralBalances[id] += (diff - IEURB(collateralAddress).getTransactionFee(msg.sender, address(this), diff));
-        }
-        
-        if(block.timestamp - updatedTime > ttl) {
-            require(uAssetAmount == borrowBalances[id], "Outside of market hour");
-        } else {
-            if(uAssetAmount < borrowBalances[id]) {
-                uint256 diff = borrowBalances[id] - uAssetAmount;
-                address addr = uAssetAddress;
-                IEURB(addr).safeTransferFrom(msg.sender, address(this), diff);
-                IEURB(addr).burn(diff);
-            } else if (uAssetAmount > borrowBalances[id]) {
-                uint256 diff = uAssetAmount - borrowBalances[id];
-                address addr = uAssetAddress;
-                uint256 deadline_ = deadline;
-                {
-                    IEURB(addr).mint(address(this), diff);
-                }
-                address[] memory path = new address[](2);
-                uint[] memory reserve = new uint[](2);
-                {
-                    (uint reserve0, uint reserve1,) = IUniswapV2Pair(IController(controllerAddress).pools(addr)).getReserves();
-                    path[0] = addr;
-                    path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1();
-                    reserve[0] = reserve0;
-                    reserve[1] = reserve1;
-                    if (IUniswapV2Pair(IController(controllerAddress).pools(addr)).token1() == addr) {
-                        path[1] = IUniswapV2Pair(IController(controllerAddress).pools(addr)).token0();
-                        reserve[0] = reserve1;
-                        reserve[1] = reserve0;
-                    }
-                }
-                {
-                    IEURB(addr).safeApprove(IController(controllerAddress).router(), diff);
-                }
-                {
-                    uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
-                    uint256 balanceBefore = IEURB(path[1]).balanceOf(address(this));
-                    IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
-                    uint256 amountOut = IEURB(path[1]).balanceOf(address(this)) - balanceBefore;
-                    lock(id, amountOut);
-                }
-                isLocked = 1;
+        if(kAssetAmount < data[id].borrowBalance) {
+            uint256 diff = data[id].borrowBalance - kAssetAmount;
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), diff);
+            ITokenERC20(kAssetAddress).burn(diff);
+        } else if (kAssetAmount > data[id].borrowBalance) {
+            uint256 diff = kAssetAmount - data[id].borrowBalance;
+            {
+                ITokenERC20(kAssetAddress).mint(address(this), diff);
             }
+            address[] memory path = new address[](2);
+            uint[] memory reserve = new uint[](2);
+            {
+                address poolAddress = IController(controllerAddress).pools(kAssetAddress);
+                (uint reserve0, uint reserve1,) = IUniswapV2Pair(poolAddress).getReserves();
+                path[0] = kAssetAddress;
+                path[1] = IUniswapV2Pair(poolAddress).token1();
+                reserve[0] = reserve0;
+                reserve[1] = reserve1;
+                if (path[1] == kAssetAddress) {
+                    path[1] = IUniswapV2Pair(poolAddress).token0();
+                    reserve[0] = reserve1;
+                    reserve[1] = reserve0;
+                }
+            }
+            {
+                ITokenERC20(kAssetAddress).safeApprove(IController(controllerAddress).router(), diff);
+            }
+            {
+                uint256 deadline_ = expiredTime;
+                uint256 amountOutMin = IUniswapV2Router02(IController(controllerAddress).router()).getAmountOut(diff, reserve[0], reserve[1]) * (10000 - slippage) / 10000;
+                uint256 balanceBefore = ITokenERC20(path[1]).balanceOf(address(this));
+                IUniswapV2Router02(IController(controllerAddress).router()).swapExactTokensForTokensSupportingFeeOnTransferTokens(diff, amountOutMin, path, address(this), deadline_);
+                lock(id, ITokenERC20(path[1]).balanceOf(address(this)) - balanceBefore);
+            }
+            isLocked = 1;
         }
         
-        borrowBalances[id] = uAssetAmount;
+        data[id].borrowBalance = kAssetAmount;
+        isInvalidSignature[signature] = true;
         
-        emit EditShort(msg.sender, id, isLocked, uAssetAmount, collateralAmount, block.timestamp);
+        emit EditShort(msg.sender, id, isLocked, kAssetAmount, collateralAmount, block.timestamp);
     }
 
-    function liquidation(address userAddress, address uAssetAddress, uint256 uAssetAmount, bytes memory id) external nonReentrant {
-        require(userAddress == accounts[id], "Wrong account");
-        require(borrowBalances[id] >= uAssetAmount, "Over liquidation");
-        
-        uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
-        uint16 discountRate = IController(controllerAddress).discountRates(uAssetAddress);
-        (uint256 targetPrice, uint256 updatedTime) = IOracle(IController(controllerAddress).oracles(uAssetAddress)).getTargetValue();
-        
+    function liquidation(
+        address kAssetAddress, 
+        uint256 kAssetAmount, 
+        uint256 targetPrice,
+        uint256 expiredTime,
+        bytes memory id,
+        bytes memory signature
+    ) external nonReentrant {
         {
-            _checkLiquidation(uAssetAddress, targetPrice, updatedTime, borrowBalances[id], collateralBalances[id], calculationDecimal, discountRate);
+            require(data[id].borrowBalance >= kAssetAmount, "1");
+            require(!isInvalidSignature[signature], "2");
+            require(expiredTime >= block.timestamp, "3");
+            require(
+                verifySignature(
+                    IController(controllerAddress).signer(),
+                    kAssetAddress,
+                    targetPrice,
+                    expiredTime,
+                    id,
+                    signature
+                ),
+                "4"
+            );
         }
         
+        uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
+        uint16 discountRate = IController(controllerAddress).discountRates(kAssetAddress);
+        
+        _checkLiquidation(kAssetAddress, data[id].borrowBalance, data[id].collateralBalance, targetPrice, calculationDecimal, discountRate);
+        
         uint256 discountedCollateralValue = 
-            (uAssetAmount * targetPrice * 985 / 1000) / (10 ** IEURB(uAssetAddress).decimals())
+            (kAssetAmount * targetPrice * 985 / 1000) / (10 ** ITokenERC20(kAssetAddress).decimals())
             * (10**calculationDecimal)
             / (10**calculationDecimal - discountRate);
             
-        address collateralAddress = IController(controllerAddress).collateralForToken(uAssetAddress);
-        if (discountedCollateralValue <= collateralBalances[id]) {
-            IEURB(uAssetAddress).safeTransferFrom(msg.sender, address(this), uAssetAmount);
-            IEURB(uAssetAddress).burn(uAssetAmount);
-            IEURB(collateralAddress).safeTransfer(msg.sender, discountedCollateralValue);
-            borrowBalances[id] -= uAssetAmount;
-            collateralBalances[id] -= discountedCollateralValue;
-            if(borrowBalances[id] == 0) {
-                IEURB(collateralAddress).safeTransfer(userAddress, collateralBalances[id]);
-                collateralBalances[id] = 0;
+        address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
+
+        {
+            isInvalidSignature[signature] = true;
+        }
+
+        if (discountedCollateralValue <= data[id].collateralBalance) {
+            ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetAmount);
+            ITokenERC20(kAssetAddress).burn(kAssetAmount);
+            ITokenERC20(collateralAddress).safeTransfer(msg.sender, discountedCollateralValue);
+            data[id].borrowBalance -= kAssetAmount;
+            data[id].collateralBalance -= discountedCollateralValue;
+            if(data[id].borrowBalance == 0) {
+                ITokenERC20(collateralAddress).safeTransfer(data[id].account, data[id].collateralBalance);
+                data[id].collateralBalance = 0;
             }
-            emit Liquidation(msg.sender, userAddress, id, uAssetAmount, discountedCollateralValue, block.timestamp, discountRate);
+            emit Liquidation(msg.sender, data[id].account, id, kAssetAmount, discountedCollateralValue, block.timestamp, discountRate);
         } else {
-            uint256 collateralBalance = collateralBalances[id];
-            uint256 uAssetNeeded =  collateralBalance * ((10**calculationDecimal) - discountRate) * (10 ** IEURB(uAssetAddress).decimals()) / ((10**calculationDecimal) * targetPrice * 985 / 1000);
+            uint256 collateralBalance = data[id].collateralBalance;
+            uint256 kAssetNeeded =  collateralBalance * ((10**calculationDecimal) - discountRate) * (10 ** ITokenERC20(kAssetAddress).decimals()) / ((10**calculationDecimal) * targetPrice * 985 / 1000);
             {
-                IEURB(uAssetAddress).safeTransferFrom(msg.sender, address(this), uAssetNeeded);
-                IEURB(uAssetAddress).burn(uAssetNeeded);
-                IEURB(collateralAddress).safeTransfer(msg.sender, collateralBalance);
+                ITokenERC20(kAssetAddress).safeTransferFrom(msg.sender, address(this), kAssetNeeded);
+                ITokenERC20(kAssetAddress).burn(kAssetNeeded);
+                ITokenERC20(collateralAddress).safeTransfer(msg.sender, collateralBalance);
             }
             {
-                borrowBalances[id] -= uAssetNeeded;
-                collateralBalances[id] = 0;
+                data[id].borrowBalance -= kAssetNeeded;
+                data[id].collateralBalance = 0;
             }
-            emit Liquidation(msg.sender, userAddress, id, uAssetNeeded, collateralBalance, block.timestamp, discountRate);
+            emit Liquidation(msg.sender, data[id].account, id, kAssetNeeded, collateralBalance, block.timestamp, discountRate);
         }
     }
     
-    function _checkShort(address uAssetAddress, uint256 updatedTime, uint256 ttl, uint256 targetPrice, uint256 uAssetAmount, uint256 collateralAmount) internal view {
+    function _checkShort(
+        address kAssetAddress, 
+        uint256 targetPrice, 
+        uint256 kAssetAmount, 
+        uint256 collateralAmount
+    ) internal view {
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
         uint16 maxCollateralRatio = IController(controllerAddress).maxCollateralRatio();
         uint16 calculationDecimal = IController(controllerAddress).calculationDecimal();
-        
-        require(block.timestamp - updatedTime <= ttl, "Target price is not updated");
-        uint256 realCollateralAmount = targetPrice * uAssetAmount / (10 ** IEURB(uAssetAddress).decimals());
+        uint256 realCollateralAmount = targetPrice * kAssetAmount / (10 ** ITokenERC20(kAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio <= collateralAmount * (10**calculationDecimal), "less than min");
         require(realCollateralAmount * maxCollateralRatio >= collateralAmount * (10**calculationDecimal), "greater than max");
     }
     
-    function _checkLiquidation(address uAssetAddress, uint256 targetPrice, uint256 updatedTime, uint256 borrowBalance, uint256 collateralBalance, uint16 calculationDecimal, uint16 discountRate) internal view {
+    function _checkLiquidation(
+        address kAssetAddress, 
+        uint256 borrowBalance, 
+        uint256 collateralBalance,
+        uint256 targetPrice,
+        uint16 calculationDecimal, 
+        uint16 discountRate
+    ) internal view {
         uint16 minCollateralRatio = IController(controllerAddress).minCollateralRatio();
-        uint256 realCollateralAmount = targetPrice * borrowBalance / (10 ** IEURB(uAssetAddress).decimals());
+        uint256 realCollateralAmount = targetPrice * borrowBalance / (10 ** ITokenERC20(kAssetAddress).decimals());
         require(realCollateralAmount * minCollateralRatio > collateralBalance * (10**calculationDecimal), "More than min");
-        uint16 configDiscountRate = IController(controllerAddress).discountRates(uAssetAddress);
+        uint16 configDiscountRate = IController(controllerAddress).discountRates(kAssetAddress);
         if (configDiscountRate < discountRate) {
             discountRate = configDiscountRate;
         }
-        uint256 ttl = IController(controllerAddress).ttl();
-        require(block.timestamp - updatedTime <= ttl, "Not updated");
     }
 
 }

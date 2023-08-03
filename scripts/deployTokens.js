@@ -8,7 +8,7 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    array = ["uBVS", "uONON", "uAESI", "uINCY", "uCTKB"]; // list of name of tokens
+    array = ["kTSLA"]; // list of name of tokens
 
     var contracts;
 
@@ -158,7 +158,7 @@ async function main() {
                     `${token.address}`,
                     "",
                     "",
-                    process.env.EURB_ADDRESS,
+                    process.env.USDT_ADDRESS,
                     10,
                 ]);
                 console.log(`${array[i]} : ` + token.address);
@@ -183,7 +183,7 @@ async function main() {
                     `${token.address}`,
                     "",
                     "",
-                    process.env.EURB_ADDRESS,
+                    process.env.USDT_ADDRESS,
                     10,
                 ]);
 

@@ -133,7 +133,7 @@ async function main() {
             tokenAddress = json[i].CONTRACTADDRESS;
             oracleAddress = json[i].ORACLEADDRESS;
             poolAddress = json[i].POOLADDRESS;
-            collateralToken = process.env.EURB_ADDRESS;
+            collateralToken = process.env.USDT_ADDRESS;
             discountRate = 10;
             tokenAddresses.push(tokenAddress);
             oracleAddresses.push(oracleAddress);

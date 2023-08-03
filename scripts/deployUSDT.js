@@ -8,20 +8,20 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    EURB = await ethers.getContractFactory("EURB");
+    EURB = await ethers.getContractFactory("BridgeToken");
     eurb = await EURB.deploy();
     await eurb.deployed();
 
-    console.log("EURB deployed: " + eurb.address);
+    console.log("USDT deployed: " + eurb.address);
 
-    ProxyEURB = await ethers.getContractFactory("ProxyEURB");
-    proxyEURB = await ProxyEURB.deploy(eurb.address);
-    await proxyEURB.deployed();
+    // ProxyEURB = await ethers.getContractFactory("ProxyEURB");
+    // proxyEURB = await ProxyEURB.deploy(eurb.address);
+    // await proxyEURB.deployed();
 
-    eurb = await EURB.attach(proxyEURB.address);
-    await eurb.deployed();
+    // eurb = await EURB.attach(proxyEURB.address);
+    // await eurb.deployed();
 
-    console.log("Proxy EURB deployed: " + eurb.address);
+    // console.log("Proxy EURB deployed: " + eurb.address);
 
     console.log("Done");
 }

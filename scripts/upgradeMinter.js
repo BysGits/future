@@ -31,10 +31,18 @@ async function main() {
                 )
             );
             break;
-        case 4:
+        case 43113:
             console.log("fuji");
             contracts = JSON.parse(
                 fs.readFileSync("./scripts/data/testnet/fuji/contracts.json")
+            );
+            break;
+        case 43114:
+            console.log("avalanche");
+            contracts = JSON.parse(
+                fs.readFileSync(
+                    "./scripts/data/mainnet/avalanche/contracts.json"
+                )
             );
             break;
         case 56:

@@ -1,27 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import {IController} from "./interfaces/IController.sol";
 import {Ownable} from "./Ownable.sol";
-import {Oracle} from "./Oracle.sol";
 
 contract Controller is Ownable, IController, Initializable {
     uint16 public override minCollateralRatio;
     uint16 public override maxCollateralRatio;
     uint16 public constant override calculationDecimal = 2;
+    uint16 public constant override royaltyDecimal = 4;
 
-    uint256 public override ttl;
     uint256 public override lockTime;
+    uint256 public override royaltyFeeRatio;
 
     address public override mintContract;
-    address public lockContract;
-
     address public override router;
-
-    // mapping token address to
-    mapping(address => address) public override oracles;
+    address public override receiverAddress;
+    address public override limitOfferContract;
+    address public override signer;
 
     // mapping token address to AMM pool address
     mapping(address => address) public override pools;
@@ -37,15 +35,8 @@ contract Controller is Ownable, IController, Initializable {
 
     mapping(address => bool) public override admins;
 
-    uint256 public override royaltyFeeRatio;
-    address public override recieverAddress;
-    address public override limitOfferContract;
-
-    mapping(address => address) public override tokenForOracle;
-
     event ListingToken(address indexed tokenAddress, uint256 timestamp);
     event DelistingToken(address indexed tokenAddress, uint256 timestamp);
-    event UpdatePrices(address[] tokenAddresses, uint256[] prices);
 
     constructor() {}
 
@@ -54,23 +45,42 @@ contract Controller is Ownable, IController, Initializable {
         _;
     }
 
+    modifier notZeroAddress(address _addr) {
+        require(_addr != address(0), "Not zero address");
+        _;
+    }
+
     function initialize(
         uint16 _minCollateralRatio,
         uint16 _maxCollateralRatio,
-        uint256 _ttl,
-        address _router
+        uint256 _lockTime,
+        uint256 _royaltyFeeRatio,
+        address _router,
+        address _receiverAddress,
+        address _signer
     ) external onlyOwner initializer {
         minCollateralRatio = _minCollateralRatio;
         maxCollateralRatio = _maxCollateralRatio;
-        ttl = _ttl;
+        royaltyFeeRatio = _royaltyFeeRatio;
+        lockTime = _lockTime;
         router = _router;
+        receiverAddress = _receiverAddress;
+        signer = _signer;
     }
 
-    function setAdmin(address _addr) public onlyOwner {
+    function setSigner(address _addr) public onlyOwner notZeroAddress(_addr) {
+        signer = _addr;
+    }
+
+    function getSigner() public view returns(address) {
+        return signer;
+    }
+
+    function setAdmin(address _addr) public onlyOwner notZeroAddress(_addr) {
         admins[_addr] = true;
     }
 
-    function revokeAdmin(address _addr) public onlyOwner {
+    function revokeAdmin(address _addr) public onlyOwner notZeroAddress(_addr) {
         admins[_addr] = false;
     }
 
@@ -78,8 +88,8 @@ contract Controller is Ownable, IController, Initializable {
         royaltyFeeRatio = _fee;
     }
 
-    function setRecieverAddress(address _addr) public onlyOwner {
-        recieverAddress = _addr;
+    function setRecieverAddress(address _addr) public onlyOwner notZeroAddress(_addr) {
+        receiverAddress = _addr;
     }
 
     function setMinCollateralRatio(
@@ -94,12 +104,8 @@ contract Controller is Ownable, IController, Initializable {
         maxCollateralRatio = _maxCollateralRatio;
     }
 
-    function setRouter(address _router) external onlyOwner {
+    function setRouter(address _router) external onlyOwner notZeroAddress(_router) {
         router = _router;
-    }
-
-    function setTTL(uint256 _ttl) external onlyOwner {
-        ttl = _ttl;
     }
 
     function setLockTime(uint256 _lockTime) external onlyOwner {
@@ -107,26 +113,25 @@ contract Controller is Ownable, IController, Initializable {
         lockTime = _lockTime;
     }
 
-    function setMintContract(address _mintAddress) external onlyOwner {
+    function setMintContract(address _mintAddress) external onlyOwner notZeroAddress(_mintAddress) {
         mintContract = _mintAddress;
     }
 
     function setLimitOfferContract(
         address _limitOfferContract
-    ) external onlyOwner {
+    ) external onlyOwner notZeroAddress(_limitOfferContract) {
         limitOfferContract = _limitOfferContract;
     }
 
     function setDiscountRate(
         address _tokenAddress,
         uint16 _rate
-    ) external onlyOwner {
+    ) external onlyOwner notZeroAddress(_tokenAddress) {
         discountRates[_tokenAddress] = _rate;
     }
 
     function registerIDOTokens(
         address[] memory tokenAddresses,
-        address[] memory oracleAddresses,
         address[] memory poolAddresses,
         address[] memory collateralTokens,
         uint16[] memory discountRate
@@ -134,7 +139,6 @@ contract Controller is Ownable, IController, Initializable {
         for (uint256 i = 0; i < tokenAddresses.length; i++) {
             registerIDOToken(
                 tokenAddresses[i],
-                oracleAddresses[i],
                 poolAddresses[i],
                 collateralTokens[i],
                 discountRate[i]
@@ -144,7 +148,6 @@ contract Controller is Ownable, IController, Initializable {
 
     function registerIDOToken(
         address tokenAddress,
-        address oracleAddress,
         address poolAddress,
         address collateralToken,
         uint16 discountRate
@@ -156,7 +159,6 @@ contract Controller is Ownable, IController, Initializable {
         );
         require(acceptedCollateral[collateralToken], "Invalid colateral token");
         collateralForToken[tokenAddress] = collateralToken;
-        tokenForOracle[oracleAddress] = tokenAddress;
         address token0 = IUniswapV2Pair(poolAddress).token0();
         address token1 = IUniswapV2Pair(poolAddress).token1();
         require(
@@ -168,7 +170,6 @@ contract Controller is Ownable, IController, Initializable {
             "Missing collateral address"
         );
         pools[tokenAddress] = poolAddress;
-        oracles[tokenAddress] = oracleAddress;
         tokenOwners[tokenAddress] = msg.sender;
         discountRates[tokenAddress] = discountRate;
         emit ListingToken(tokenAddress, block.timestamp);
@@ -181,14 +182,12 @@ contract Controller is Ownable, IController, Initializable {
         );
         collateralForToken[tokenAddress] = address(0);
         pools[tokenAddress] = address(0);
-        oracles[tokenAddress] = address(0);
         tokenOwners[tokenAddress] = address(0);
         emit DelistingToken(tokenAddress, block.timestamp);
     }
 
     function updateIDOToken(
         address tokenAddress,
-        address oracleAddress,
         address poolAddress,
         address collateralToken
     ) public onlyAdmin {
@@ -201,8 +200,7 @@ contract Controller is Ownable, IController, Initializable {
             "Invalid collateral token"
         );
         pools[tokenAddress] = poolAddress;
-        oracles[tokenAddress] = oracleAddress;
-        tokenForOracle[oracleAddress] = tokenAddress;
+        collateralForToken[tokenAddress] = collateralToken;
     }
 
     function registerCollateralAsset(
@@ -210,29 +208,5 @@ contract Controller is Ownable, IController, Initializable {
         bool value
     ) public onlyOwner {
         acceptedCollateral[collateralAsset] = value;
-    }
-
-    function updatePrices(
-        address[] memory tokenAddresses,
-        uint256[] memory targetPrices
-    ) public onlyAdmin {
-        for (uint256 i = 0; i < tokenAddresses.length; i++) {
-            Oracle(oracles[tokenAddresses[i]]).update(targetPrices[i]);
-        }
-
-        emit UpdatePrices(tokenAddresses, targetPrices);
-    }
-
-    function getOraclePrices(
-        address[] memory tokenAddresses
-    ) public view returns (uint256[] memory, uint256[] memory) {
-        uint256[] memory targetPrices = new uint256[](tokenAddresses.length);
-        uint256[] memory lastUpdated = new uint256[](tokenAddresses.length);
-        for (uint256 i = 0; i < tokenAddresses.length; i++) {
-            (targetPrices[i], lastUpdated[i]) = Oracle(
-                oracles[tokenAddresses[i]]
-            ).getTargetValue();
-        }
-        return (targetPrices, lastUpdated);
     }
 }

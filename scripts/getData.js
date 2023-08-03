@@ -36,13 +36,13 @@ async function main() {
     };
 
     result = new ListModel(
-        await getDataFromUrl("https://api.dillibits.com/uPrice/")
+        await getDataFromUrl(process.env.API_PRICE)
     );
 
     // console.log(result.master[0].value);
 
     var array = result.master.map((obj) => {
-        return [obj.key, [obj.value[0].value, obj.value[1].value]];
+        return [obj.key, [obj.value[0].value]];
     });
 
     fs.writeFileSync("./scripts/data/price.json", JSON.stringify(array));

@@ -8,7 +8,7 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    var array = ["kTSLA"]; // list of name of tokens
+    var array = ["uBVS"]; // list of name of tokens
 
     var contracts;
 
@@ -116,13 +116,7 @@ async function main() {
 
     var oracleMap = new Map(oracles);
 
-    var tokenAddresses = [];
-    // var oracleAddresses = [];
-    var poolAddresses = [];
-    var collateralTokens = [];
-    var discountRates = [];
-
-    console.log("Registering tokens: ");
+    console.log("Delisting tokens: ");
     if (array.length > 0) {
         for (i = 0; i < array.length; i++) {
             if (
@@ -130,15 +124,10 @@ async function main() {
                 oracleMap.get(array[i])[2] != ""
             ) {
                 tokenAddress = oracleMap.get(array[i])[0];
-                // oracleAddress = oracleMap.get(array[i])[1];
-                poolAddress = oracleMap.get(array[i])[2];
-                collateralToken = oracleMap.get(array[i])[3];
-                discountRate = oracleMap.get(array[i])[4];
-                tokenAddresses.push(tokenAddress);
-                // oracleAddresses.push(oracleAddress);
-                poolAddresses.push(poolAddress);
-                collateralTokens.push(collateralToken);
-                discountRates.push(discountRate);
+                delisting = await controller.unregisterToken(
+                    tokenAddress
+                );
+                await delisting.wait();
             }
         }
     } else {
@@ -146,27 +135,16 @@ async function main() {
         for (i = 0; i < array.length; i++) {
             if (array[i][1][0] != "" && array[i][1][2] != "") {
                 tokenAddress = array[i][1][0];
-                // oracleAddress = array[i][1][1];
-                poolAddress = array[i][1][2];
-                collateralToken = array[i][1][3];
-                discountRate = array[i][1][4];
-                tokenAddresses.push(tokenAddress);
-                // oracleAddresses.push(oracleAddress);
-                poolAddresses.push(poolAddress);
-                collateralTokens.push(collateralToken);
-                discountRates.push(discountRate);
+                
+                delisting = await controller.unregisterToken(
+                    tokenAddress
+                );
+                await delisting.wait();
             }
         }
     }
 
-    register = await controller.registerIDOTokens(
-        tokenAddresses,
-        // oracleAddresses,
-        poolAddresses,
-        collateralTokens,
-        discountRates
-    );
-    await register.wait();
+    
 
     console.log("Done");
 }

@@ -8,12 +8,6 @@ async function main() {
     console.log(`Deploying contracts with the account: ${deployer.address}`);
     console.log(`Balance: ${(await deployer.getBalance()).toString()}`);
 
-    Controller = await ethers.getContractFactory("Controller");
-    controller = await Controller.deploy();
-    await controller.deployed();
-
-    console.log("Controller deployed: " + controller.address);
-
     const currentProvider = (
         await (await ethers.getSigner()).provider.getNetwork()
     ).chainId;
@@ -67,12 +61,14 @@ async function main() {
             break;
     }
 
-    ProxyController = await ethers.getContractFactory("Proxy");
-    proxyController = await ProxyController.attach(contracts.controller);
-    await proxyController.deployed();
+    Controller = await ethers.getContractFactory("Controller");
+    controller = await Controller.attach(contracts.controller);
+    await controller.deployed();
 
-    upgrade = await proxyController.upgradeTo(controller.address);
-    await upgrade.wait();
+    console.log("Proxy Controller: " + controller.address);
+
+    set = await controller.setSigner(process.env.SIGNER_ADDRESS);
+    await set.wait();
 
     console.log("Done");
 }

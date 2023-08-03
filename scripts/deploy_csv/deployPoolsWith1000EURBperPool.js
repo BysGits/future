@@ -176,131 +176,131 @@ async function main() {
     var priceMap = new Map(prices);
     var eurbPerPool = 1000000;
 
-    for (var i = 0; i < json.length; i++) {
-        if (
-            json[i].CONTRACTADDRESS != "" &&
-            json[i].ORACLEADDRESS != "" &&
-            json[i].POOLADDRESS === ""
-        ) {
-            var uAssetAmount;
-            if (priceMap.get(json[i].SYMBOL)[1] === 0) {
-                console.log("Take USD price");
-                uAssetAmount = ethers.utils
-                    .parseEther(
-                        (
-                            eurbPerPool / priceMap.get(json[i].SYMBOL)[0]
-                        ).toString()
-                    )
-                    .toString();
-            } else {
-                console.log("Take EUR price");
-                uAssetAmount = ethers.utils
-                    .parseEther(
-                        (
-                            eurbPerPool / priceMap.get(json[i].SYMBOL)[1]
-                        ).toString()
-                    )
-                    .toString();
-            }
-            time = (new Date().getTime() / 1000).before() + 100000;
+    // for (var i = 0; i < json.length; i++) {
+    //     if (
+    //         json[i].CONTRACTADDRESS != "" &&
+    //         json[i].ORACLEADDRESS != "" &&
+    //         json[i].POOLADDRESS === ""
+    //     ) {
+    //         var uAssetAmount;
+    //         if (priceMap.get(json[i].SYMBOL)[1] === 0) {
+    //             console.log("Take USD price");
+    //             uAssetAmount = ethers.utils
+    //                 .parseEther(
+    //                     (
+    //                         eurbPerPool / priceMap.get(json[i].SYMBOL)[0]
+    //                     ).toString()
+    //                 )
+    //                 .toString();
+    //         } else {
+    //             console.log("Take EUR price");
+    //             uAssetAmount = ethers.utils
+    //                 .parseEther(
+    //                     (
+    //                         eurbPerPool / priceMap.get(json[i].SYMBOL)[1]
+    //                     ).toString()
+    //                 )
+    //                 .toString();
+    //         }
+    //         time = (new Date().getTime() / 1000).before() + 100000;
 
-            Token = await ethers.getContractFactory("ERC20Token");
-            token = await Token.attach(json[i].CONTRACTADDRESS);
-            await token.deployed();
+    //         Token = await ethers.getContractFactory("ERC20Token");
+    //         token = await Token.attach(json[i].CONTRACTADDRESS);
+    //         await token.deployed();
 
-            if (
-                parseInt(
-                    await token.allowance(deployer.address, router.address)
-                ) < parseInt(uAssetAmount)
-            ) {
-                approve = await token.increaseAllowance(
-                    router.address,
-                    uAssetAmount
-                );
-                await approve.wait();
-            }
+    //         if (
+    //             parseInt(
+    //                 await token.allowance(deployer.address, router.address)
+    //             ) < parseInt(uAssetAmount)
+    //         ) {
+    //             approve = await token.increaseAllowance(
+    //                 router.address,
+    //                 uAssetAmount
+    //             );
+    //             await approve.wait();
+    //         }
 
-            Eurb = await ethers.getContractFactory("ERC20Token");
-            eurb = await Eurb.attach(process.env.EURB_ADDRESS);
-            await eurb.deployed();
+    //         Eurb = await ethers.getContractFactory("ERC20Token");
+    //         eurb = await Eurb.attach(process.env.USDT_ADDRESS);
+    //         await eurb.deployed();
 
-            var eurbDecimal = parseInt(await eurb.decimals());
-            console.log(eurbDecimal);
-            var eurbAmount = (
-                eurbPerPool * Math.pow(10, eurbDecimal)
-            ).toString();
-            console.log(eurbAmount);
+    //         var eurbDecimal = parseInt(await eurb.decimals());
+    //         console.log(eurbDecimal);
+    //         var eurbAmount = (
+    //             eurbPerPool * Math.pow(10, eurbDecimal)
+    //         ).toString();
+    //         console.log(eurbAmount);
 
-            if (
-                parseInt(
-                    await eurb.allowance(deployer.address, router.address)
-                ) < parseInt(eurbAmount)
-            ) {
-                approve = await eurb.increaseAllowance(
-                    router.address,
-                    eurbAmount
-                );
-                await approve.wait();
-            }
+    //         if (
+    //             parseInt(
+    //                 await eurb.allowance(deployer.address, router.address)
+    //             ) < parseInt(eurbAmount)
+    //         ) {
+    //             approve = await eurb.increaseAllowance(
+    //                 router.address,
+    //                 eurbAmount
+    //             );
+    //             await approve.wait();
+    //         }
 
-            addLiquidity = await router.addLiquidity(
-                token.address,
-                eurb.address,
-                uAssetAmount,
-                eurbAmount,
-                0,
-                0,
-                deployer.address,
-                time
-            );
-            await addLiquidity.wait();
+    //         addLiquidity = await router.addLiquidity(
+    //             token.address,
+    //             eurb.address,
+    //             uAssetAmount,
+    //             eurbAmount,
+    //             0,
+    //             0,
+    //             deployer.address,
+    //             time
+    //         );
+    //         await addLiquidity.wait();
 
-            Factory = await ethers.getContractFactory("UniswapV2Factory");
-            factory = await Factory.attach(process.env.UNISWAP_V2_FACTORY_FUJI);
-            await factory.deployed();
+    //         Factory = await ethers.getContractFactory("UniswapV2Factory");
+    //         factory = await Factory.attach(process.env.UNISWAP_V2_FACTORY_FUJI);
+    //         await factory.deployed();
 
-            pool = await factory.getPair(
-                token.address,
-                process.env.EURB_ADDRESS
-            );
+    //         pool = await factory.getPair(
+    //             token.address,
+    //             process.env.USDT_ADDRESS
+    //         );
 
-            json[i].POOLADDRESS = pool;
-            console.log(`${json[i].SYMBOL} : ${pool}`);
-        }
-    }
+    //         json[i].POOLADDRESS = pool;
+    //         console.log(`${json[i].SYMBOL} : ${pool}`);
+    //     }
+    // }
 
-    switch (currentProvider) {
-        case 1:
-            // fs.writeFileSync(
-            //     "./scripts/data/mainnet/ethereum/infoToken.json",
-            //     JSON.stringify(info)
-            // );
-            // fs.writeFileSync(
-            //     "./scripts/data/mainnet/ethereum/deployedToken.json",
-            //     JSON.stringify(array)
-            // );
-            csv = new ObjectsToCsv(json);
-            await csv.toDisk("./scripts/data/mainnet/ethereum/infoToken.csv");
-            break;
-        case 4:
-            csv = new ObjectsToCsv(json);
-            await csv.toDisk("./scripts/data/testnet/fuji/infoToken.csv");
-            break;
-        case 56:
-            csv = new ObjectsToCsv(json);
-            await csv.toDisk("./scripts/data/mainnet/bsc/infoToken.csv");
-            break;
-        case 97:
-            csv = new ObjectsToCsv(json);
-            await csv.toDisk("./scripts/data/testnet/bsc/infoToken.csv");
-            break;
-        case 80001:
-            csv = new ObjectsToCsv(json);
-            await csv.toDisk("./scripts/data/testnet/polygon/infoToken.csv");
-            break;
-        default:
-            break;
-    }
+    // switch (currentProvider) {
+    //     case 1:
+    //         // fs.writeFileSync(
+    //         //     "./scripts/data/mainnet/ethereum/infoToken.json",
+    //         //     JSON.stringify(info)
+    //         // );
+    //         // fs.writeFileSync(
+    //         //     "./scripts/data/mainnet/ethereum/deployedToken.json",
+    //         //     JSON.stringify(array)
+    //         // );
+    //         csv = new ObjectsToCsv(json);
+    //         await csv.toDisk("./scripts/data/mainnet/ethereum/infoToken.csv");
+    //         break;
+    //     case 4:
+    //         csv = new ObjectsToCsv(json);
+    //         await csv.toDisk("./scripts/data/testnet/fuji/infoToken.csv");
+    //         break;
+    //     case 56:
+    //         csv = new ObjectsToCsv(json);
+    //         await csv.toDisk("./scripts/data/mainnet/bsc/infoToken.csv");
+    //         break;
+    //     case 97:
+    //         csv = new ObjectsToCsv(json);
+    //         await csv.toDisk("./scripts/data/testnet/bsc/infoToken.csv");
+    //         break;
+    //     case 80001:
+    //         csv = new ObjectsToCsv(json);
+    //         await csv.toDisk("./scripts/data/testnet/polygon/infoToken.csv");
+    //         break;
+    //     default:
+    //         break;
+    // }
 
     console.log("Done");
 }
