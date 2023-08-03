@@ -37,26 +37,6 @@
 >   npm run deploy:*network name*:token
 
 
-## Deploy oracles
-
-**To deploy specific oracles of tokens, input the name of the token in the variable array in the file deployOracles.js**
-
-**If the array is empty, it will deploy all the oracles of each tokens in the scripts/data/*network name*/deployedToken.json**
-
->   npm run deploy:*network name*:oracle
-
-
-## Update prices
-
->   npm run fetch_data
-
-**To update prices of specific tokens, input the name of the token in the variable array in the file updatePrices.js**
-
-**If the array is empty, it will update prices of all tokens in the scripts/data/*network name*/deployedToken.json**
-
->   npm run update_prices:*network name*
-
-
 ## Deploy pools
 
 **To deploy specific pools of tokens, input the name of the token in the variable array in the file deployPools.js**
