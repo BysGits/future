@@ -16,7 +16,7 @@ async function main() {
     var array = ["kTSLA"]; // list of name of tokens
 
     var Router = await ethers.getContractFactory("UniswapV2Router02");
-    var router = await Router.attach(process.env.SUSHISWAP_V2_ROUTER_FUJI);
+    var router = await Router.attach(process.env.SUSHISWAP_V2_ROUTER_AVALANCHE);
     await router.deployed();
 
     var prices = JSON.parse(fs.readFileSync("./scripts/data/price.json"));
@@ -132,7 +132,7 @@ async function main() {
 
                 Factory = await ethers.getContractFactory("UniswapV2Factory");
                 factory = await Factory.attach(
-                    process.env.SUSHISWAP_V2_FACTORY_FUJI
+                    process.env.SUSHISWAP_V2_FACTORY_AVALANCHE
                 );
                 await factory.deployed();
 

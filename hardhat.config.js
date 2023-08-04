@@ -110,6 +110,7 @@ module.exports = {
         },
         avalanche: {
             url: "https://api.avax.network/ext/bc/C/rpc",
+            gasPrice: 30000000000,
             accounts: [process.env.PRIVATE_KEY],
         },
         bscTestnet: {

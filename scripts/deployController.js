@@ -30,7 +30,7 @@ async function main() {
             process.env.MAX_COLLATERAL_RATIO,
             process.env.LOCK_TIME,
             process.env.ROYALTY_FEE_RATIO,
-            process.env.SUSHISWAP_V2_ROUTER_FUJI,
+            process.env.SUSHISWAP_V2_ROUTER_AVALANCHE,
             deployer.address,
             deployer.address
         );
