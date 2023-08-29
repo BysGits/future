@@ -66,6 +66,8 @@ contract LimitOffer is Ownable, ReentrancyGuard {
     function offerBuy(address kAssetAddress, uint256 kAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
         Order storage order = orders[id];
         require(order.offerCollateralAmount == 0, "Still being offered to buy");
+        require(kAssetAmount > 0, "kAsset amount is zero");
+        require(collateralAmount > 0, "collateral amount is zero");
 
         address collateralAddress = IController(controllerAddress).collateralForToken(kAssetAddress);
 
@@ -84,6 +86,9 @@ contract LimitOffer is Ownable, ReentrancyGuard {
     }
 
     function offerSell(address kAssetAddress, uint256 kAssetAmount, uint256 collateralAmount, bytes memory id) external nonReentrant {
+        require(kAssetAmount > 0, "kAsset amount is zero");
+        require(collateralAmount > 0, "collateral amount is zero");
+
         uint256 royaltyFee = IController(controllerAddress).royaltyFeeRatio();
         
         {
