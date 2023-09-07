@@ -17,6 +17,15 @@
 **KASSET_PER_POOL is in ether unit**
 
 
+## Pre-requirements
+
+> npm run fetch_data
+
+> npm run reset_token_deploy:*network name*
+
+> npm run reset_info_token:*network name*
+
+
 ## Deploy contracts
 
 > npm run deploy:*network name*:controller
